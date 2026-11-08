@@ -4,7 +4,7 @@ See every screen of your web app as the code renders it, compare it with live, a
 
 Atlas is for people who build by prompting coding agents. Agents build many screens and flows quickly, and clicking through all of them to check the result is slow. Atlas puts every screen in one place, shows what differs from live, and turns your marks into tasks that agents pick up.
 
-> **Status:** early. Atlas can set up a project, read state recipes and serve them to agents over MCP. Capture, the viewer, compare and tasks come next. The [build plan](#build-plan) lists the steps.
+> **Status:** early. Atlas can set up a project, serve its MCP tools on your computer, connect your coding agent in one step, and teach the agent how to write state recipes. Capture, the viewer, compare and tasks come next. The [build plan](#build-plan) lists the steps.
 
 ## How it works
 
@@ -37,30 +37,43 @@ This writes:
 - `.atlas/tasks/`: one file for each task;
 - a `.gitignore` line for `.atlas/store/`, where captures are kept.
 
-### Connect your coding agent
+### Start Atlas and connect your coding agent
 
-Add Atlas as an MCP server in your agent's settings. Run it from your project's root folder:
+In your project's root folder:
 
-```json
-{
-  "mcpServers": {
-    "atlas": { "command": "node", "args": ["/path/to/atlas/dist/cli.js", "mcp"] }
-  }
-}
+```sh
+node /path/to/atlas/dist/cli.js serve
 ```
+
+Atlas runs on your computer only, with its MCP endpoint at `http://localhost:4317/mcp`. Then connect your agent with one command:
+
+| Agent | Command |
+| --- | --- |
+| Claude Code | `claude mcp add --transport http atlas http://localhost:4317/mcp` |
+| Codex | `codex mcp add atlas --url http://localhost:4317/mcp` |
+| Cursor | Open the link that `atlas connect` prints, or run `atlas connect --write cursor` |
+
+`atlas connect` prints these for your setup, and `atlas connect --write <claude|codex|cursor>` adds Atlas to that agent for you. Any other MCP client takes the endpoint as a streamable HTTP server.
+
+You don't need to add anything to `AGENTS.md` or similar files. The server tells your agent how to use Atlas.
+
+For clients that start MCP servers themselves, `atlas mcp` serves the same tools over stdio.
 
 ## Commands
 
 | Command | What it does |
 | --- | --- |
 | `atlas init` | Sets up `.atlas/` in the project |
+| `atlas serve` | Starts Atlas on your computer, with the MCP endpoint at `/mcp`. `--port` changes the port from 4317 |
+| `atlas connect` | Shows how to connect each coding agent. `--write <claude\|codex\|cursor>` adds Atlas to that agent |
 | `atlas states` | Lists state recipes, recipes that need repair, and the live and branch commits. Add `--json` for structured output |
-| `atlas mcp` | Starts the MCP server over stdio |
+| `atlas mcp` | Serves the MCP tools over stdio |
 
 ## MCP tools
 
 | Tool | What it does |
 | --- | --- |
+| `atlas_guide` | Explains how Atlas works and how to write state recipes. Agents call it once before their first Atlas task |
 | `atlas_states` | Lists state recipes, recipes that need repair and why, and the live and branch commits resolved from git |
 
 ## State recipes

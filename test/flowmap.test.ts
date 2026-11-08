@@ -51,6 +51,8 @@ describe("flowmap setup", () => {
     try {
       expect(said).toMatch(/Do the next steps now/);
       expect(said).toContain(`node ${CLI} capture --base-url`);
+      expect(said).toContain(`Run node ${CLI} states after you write or change recipes`);
+      expect(said).toMatch(/add their CSS selectors to "hide"/);
       expect(git(project, "status", "--porcelain")).toBe("?? .flowmap/");
       const data = (await (await fetch(`http://localhost:${port}/api/flowmap`)).json()) as { project: { root: string } };
       expect(data.project.root).toBe(execFileSync("realpath", [project], { encoding: "utf8" }).trim());

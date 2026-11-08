@@ -176,6 +176,9 @@ svg.links circle.on { stroke: var(--sel); }
 .zbtn { display: inline-grid; place-items: center; border: 0; background: transparent; height: 32px; min-width: 32px; padding: 0 8px; border-radius: 8px; color: var(--ink-2); font-size: .8125rem; }
 .zbtn svg { width: 14px; height: 14px; }
 .zbtn.primary { display: inline-flex; align-items: center; gap: 6px; padding: 0 12px 0 10px; background: var(--hover); color: var(--ink); font-weight: 500; letter-spacing: -0.005em; }
+.zbtn.agents { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; color: var(--ink); }
+.zbtn.agents svg { width: 16px; height: 16px; }
+.zbtn.agents[aria-expanded="true"] { background: var(--hover); }
 .zbtn.primary[aria-expanded="true"] { background: color-mix(in srgb, var(--hover), var(--ink) 7%); }
 
 /* Connect panel: one row for each coding agent, each with one action. A connected agent shows that in its row.
@@ -1252,6 +1255,13 @@ function fillConnect() {
     <div class="ask"><p>Then ask your agent</p>
       <div class="say"><span>${ASK}</span><button class="copy" type="button" data-copy="${ASK}" aria-label="Copy the sentence">${icon("copy-linear")}</button></div></div>`}`;
   if (focused) [...panel.querySelectorAll("[aria-label]")].find((el) => el.getAttribute("aria-label") === focused)?.focus();
+  // Once an agent is connected, the button shrinks to that agent's logo: it still opens the panel to connect another.
+  const btn = $("connectBtn"), linked = rows.filter((r) => latest(r.id));
+  btn.classList.toggle("primary", !linked.length);
+  btn.classList.toggle("agents", linked.length > 0);
+  btn.innerHTML = linked.length ? linked.map((r) => icon(`logo-${r.id}`)).join("") : `${icon("plug-circle-linear")}Connect`;
+  btn.setAttribute("aria-label", linked.length ? `${linked.map((r) => r.name).join(" and ")} connected. Connect another agent` : "Connect an agent");
+  btn.title = linked.length ? `${linked.map((r) => r.name).join(" and ")} connected` : "";
 }
 function toggleConnect(open) {
   if (open) closePop();
@@ -1309,7 +1319,6 @@ function fillTheme() {
 }
 async function start() {
   ICONS = await (await fetch("/icons.json")).json();
-  $("connectBtn").insertAdjacentHTML("afterbegin", icon("plug-circle-linear"));
   $("commentBtn").innerHTML = `${icon("chat-round-line-linear")}Comment`;
   $("sideBtn").innerHTML = icon("panel-left-linear");
   fillTheme();

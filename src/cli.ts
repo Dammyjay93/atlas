@@ -106,11 +106,12 @@ function nextForAgent(viewer: string, mcp: string, recipes: number): string {
 
 1. ${recipes ? `The project has ${recipes} recipes in .flowmap/states/. Add one for each screen that has none.` : "Find the app's screens from its routes, and write one recipe for each in .flowmap/states/<id>.json."} Start with the screens a person sees most. Leave out screens that need sign-in unless the project has a way to make a test session.
 2. Start the app's development server if it is not running.
-3. Capture every screen: ${self()} capture --base-url <the app's address>. Each screen appears in the person's browser as it is captured. Fix any recipe whose capture landed on the wrong page, and capture again.
-4. Connect yourself to Flowmap for later work. ${connectInfo(mcp).clients.filter((c) => c.client !== "cursor").map((c) => `${c.name}: ${c.command}.`).join(" ")} Cursor: ${self()} connect --write cursor.
-5. Tell the person how many screens are in Flowmap, and that they can mark any of them for you to change.
+3. Check the recipes with ${self()} states, and fix any it lists as invalid.
+4. Capture every screen: ${self()} capture --base-url <the app's address>. Each screen appears in the person's browser as it is captured. Fix any recipe whose capture landed on the wrong page. If the pictures show development-only buttons or badges, such as a router or query devtools button, add their CSS selectors to "hide" in .flowmap/config.json. Then capture again.
+5. Connect yourself to Flowmap for later work. Its tools, such as flowmap_capture and flowmap_tasks, load in your next session; until then, use the commands above. ${connectInfo(mcp).clients.filter((c) => c.client !== "cursor").map((c) => `${c.name}: ${c.command}.`).join(" ")} Cursor: ${self()} connect --write cursor.
+6. Tell the person how many screens are in Flowmap, and that they can mark any of them for you to change.
 
-${TOPICS.recipes}`;
+${TOPICS.recipes.replace("Call flowmap_states after you write or change recipes", `Run ${self()} states after you write or change recipes`)}`;
 }
 
 async function main(argv: string[]): Promise<number> {

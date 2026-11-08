@@ -5,6 +5,7 @@ import { currentBranch, readConfig, resolveRef, AtlasError } from "./project.js"
 import { snapshotPage } from "./snapshot.js";
 import { readStates } from "./states.js";
 import { saveCapture, type Entry } from "./store.js";
+import { layoutMap } from "./text-map.js";
 
 export interface CookieInput {
   name: string;
@@ -22,6 +23,8 @@ export interface CaptureInput {
   /** The test session for states that need sign-in. */
   cookies?: CookieInput[];
   widths?: number[];
+  /** True when baseUrl serves the live ref's code, such as a second copy of the project checked out at live. The capture is filed under the live commit. */
+  live?: boolean;
 }
 
 export interface WidthResult {
@@ -77,16 +80,18 @@ export async function capture(root: string, input: CaptureInput): Promise<Captur
   const { states } = readStates(root);
   const state = states.find((s) => s.id === input.state);
   if (!state) throw new AtlasError(`No valid recipe with id "${input.state}". Recipes: ${states.map((s) => s.id).join(", ") || "none"}. Call atlas_states to see recipes that need repair.`);
-  const commit = resolveRef(root, "HEAD");
-  if (!commit) throw new AtlasError("The project has no commit yet. Commit once, then capture.");
+  const commit = input.live ? resolveRef(root, config.liveRef) : resolveRef(root, "HEAD");
+  if (!commit) {
+    throw new AtlasError(input.live ? `Live's ref "${config.liveRef}" does not resolve to a commit. Fetch it, or set "liveRef" in .atlas/config.json.` : "The project has no commit yet. Commit once, then capture.");
+  }
   let base: URL;
   try {
     base = new URL(input.baseUrl);
   } catch {
     throw new AtlasError(`baseUrl "${input.baseUrl}" is not a web address, such as http://localhost:3000.`);
   }
-  const at = { commit, branch: currentBranch(root) };
-  const uncommitted = hasUncommitted(root);
+  const at = { commit, branch: input.live ? config.liveRef : currentBranch(root) };
+  const uncommitted = input.live ? false : hasUncommitted(root);
   const widths = input.widths ?? state.widths ?? config.widths;
   const browser = await launch();
   const results: WidthResult[] = [];
@@ -115,6 +120,8 @@ export async function capture(root: string, input: CaptureInput): Promise<Captur
         const shot = { fullPage: state.fullPage ?? false, animations: "disabled" as const, caret: "hide" as const };
         const png = await page.screenshot({ ...shot, type: "png" });
         const preview = await page.screenshot({ ...shot, type: "jpeg", quality: 70, scale: "css" });
+        // Before the snapshot, which rewrites the page's styles and so its layout.
+        const layout = await page.evaluate(layoutMap, shot.fullPage);
         const html = await page.evaluate(snapshotPage);
         const landed = new URL(page.url());
         const entry = {
@@ -125,8 +132,9 @@ export async function capture(root: string, input: CaptureInput): Promise<Captur
           capturedAt: new Date().toISOString(),
           uncommitted
         };
-        const previous = saveCapture(root, at, state.id, width, { png, html }, entry);
-        const saved: Entry = { png: `.atlas/store/${commit}/${state.id}/${width}.png`, html: `.atlas/store/${commit}/${state.id}/${width}.html`, ...entry };
+        const previous = saveCapture(root, at, state.id, width, { png, html, layout }, entry);
+        const dir = `.atlas/store/${commit}/${state.id}/${width}`;
+        const saved: Entry = { png: `${dir}.png`, html: `${dir}.html`, layout: `${dir}.layout.json`, ...entry };
         results.push({ width, entry: saved, changed: previous?.hash !== entry.hash, preview });
       } finally {
         await context.close();

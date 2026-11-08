@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { closeSync, existsSync, openSync, readdirSync, readSync } from "node:fs";
 import { join } from "node:path";
+import { compareEntries, type Comparison } from "./compare.js";
 import { connectInfo } from "./connect.js";
 import { overview } from "./overview.js";
-import { readConfig } from "./project.js";
+import { AtlasError, readConfig } from "./project.js";
 import type { Agent } from "./serve.js";
 import { readManifest, type Manifest } from "./store.js";
 
@@ -52,20 +53,31 @@ export function viewerData(root: string, port: number, agents: Agent[] = []) {
   const config = readConfig(root);
   const view = overview(root);
   const manifest = newestManifest(root, view.branch.commit);
-  const shots: Record<string, Record<string, { png: string; height: number; landedOn?: string; uncommitted: boolean; capturedAt: string }>> = {};
+  // Compare with live only when the shown captures are not live's own, and live has captures.
+  const liveManifest = view.live.commit && manifest && manifest.commit !== view.live.commit ? readManifest(root, view.live.commit) : null;
+  const picture = (png: string, width: string) => {
+    const size = pngSize(join(root, png));
+    const scale = size ? size.width / Number(width) : 2;
+    return { png: "/" + png.replace(/^\.atlas\//, ""), height: size ? Math.round(size.height / scale) : Number(width) >= 768 ? 900 : 844 };
+  };
+  type Shot = ReturnType<typeof picture> & { landedOn?: string; uncommitted: boolean; capturedAt: string; live?: ReturnType<typeof picture>; compare?: Comparison };
+  const shots: Record<string, Record<string, Shot>> = {};
   for (const [state, byWidth] of Object.entries(manifest?.states ?? {})) {
     for (const [width, entry] of Object.entries(byWidth)) {
-      const file = join(root, entry.png);
-      if (!existsSync(file)) continue;
-      const size = pngSize(file);
-      const scale = size ? size.width / Number(width) : 2;
-      (shots[state] ??= {})[width] = {
-        png: "/" + entry.png.replace(/^\.atlas\//, ""),
-        height: size ? Math.round(size.height / scale) : Number(width) >= 768 ? 900 : 844,
-        ...(entry.landedOn ? { landedOn: entry.landedOn } : {}),
-        uncommitted: entry.uncommitted,
-        capturedAt: entry.capturedAt
-      };
+      if (!existsSync(join(root, entry.png))) continue;
+      const shot: Shot = { ...picture(entry.png, width), ...(entry.landedOn ? { landedOn: entry.landedOn } : {}), uncommitted: entry.uncommitted, capturedAt: entry.capturedAt };
+      if (liveManifest) {
+        const live = liveManifest.states[state]?.[width];
+        const usable = live && existsSync(join(root, live.png)) ? live : undefined;
+        try {
+          shot.compare = compareEntries(root, Number(width), usable, entry);
+          if (usable) shot.live = picture(usable.png, width);
+        } catch (error) {
+          // A pair that cannot be compared, such as pictures of different widths, shows without a comparison.
+          if (!(error instanceof AtlasError)) throw error;
+        }
+      }
+      (shots[state] ??= {})[width] = shot;
     }
   }
   return {
@@ -74,6 +86,8 @@ export function viewerData(root: string, port: number, agents: Agent[] = []) {
     live: view.live,
     branch: view.branch,
     shown: manifest ? { commit: manifest.commit, behind: commitsBehind(root, manifest.commit) } : null,
+    /** True when live has captures to compare with. */
+    compared: liveManifest !== null,
     states: view.states,
     invalid: view.invalid,
     shots,

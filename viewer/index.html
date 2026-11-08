@@ -64,6 +64,22 @@ svg.wires .head, svg.wires circle { fill: var(--connector); stroke: none; }
 @container (max-width: 200px) { .warn .w { display: none; } }
 .warn { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 999px; background: var(--warn-bg); color: var(--warn-ink); font-size: .75rem; font-weight: 500; flex: none; }
 .warn svg { width: 12px; height: 12px; }
+/* Compared with live: a label in the name row, and each changed area outlined with a thin dash at one screen size. */
+.tag { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border: .5px solid var(--hairline); border-radius: 999px; color: var(--ink-3); font-size: .75rem; flex: none; }
+@container (max-width: 200px) { .tag { display: none; } }
+.chg { position: absolute; outline: calc(1px * var(--inv)) dashed var(--warn-ink); outline-offset: calc(3px * var(--inv)); border-radius: calc(6px * var(--inv)); background: color-mix(in srgb, var(--warn-bg) 35%, transparent); pointer-events: none; }
+/* Compare: over the selected screen, live drawn over this branch up to the handle. Drag the handle, or use the arrow keys on it. */
+.cmp { position: absolute; z-index: 1; overflow: hidden; background: var(--ground); box-shadow: 0 0 0 calc(1px * var(--inv)) var(--edge); }
+.cmp img { position: absolute; left: 0; top: 0; width: 100%; height: auto; pointer-events: none; user-select: none; }
+.cmp .live { position: absolute; inset: 0; overflow: hidden; background: var(--ground); }
+.cmp .handle { position: absolute; top: 0; bottom: 0; width: calc(32px * var(--inv)); margin-left: calc(-16px * var(--inv)); cursor: ew-resize; touch-action: none; }
+.cmp .handle::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: calc(2px * var(--inv)); margin-left: calc(-1px * var(--inv)); background: var(--ink); }
+.cmp .handle span { position: absolute; left: 50%; top: 50%; width: calc(28px * var(--inv)); height: calc(28px * var(--inv)); transform: translate(-50%, -50%); border-radius: 999px; background: var(--ink); box-shadow: 0 0 0 calc(3px * var(--inv)) var(--ground); }
+.cmp .handle:focus-visible { outline: none; }
+.cmp .handle:focus-visible span { box-shadow: 0 0 0 calc(3px * var(--inv)) var(--ground), 0 0 0 calc(5px * var(--inv)) var(--focus); }
+.cmp .lab { position: absolute; top: calc(12px * var(--inv)); padding: calc(3px * var(--inv)) calc(10px * var(--inv)); border-radius: 999px; background: var(--ink); color: var(--ground); font-size: calc(12px * var(--inv)); font-weight: 500; line-height: 1.3; white-space: nowrap; pointer-events: none; }
+.cmp .lab.l { left: calc(12px * var(--inv)); }
+.cmp .lab.r { right: calc(12px * var(--inv)); background: var(--warn-ink); }
 .surf { position: absolute; background: var(--section); border: .5px solid var(--hairline); border-radius: 16px; }
 .sect { position: absolute; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; white-space: nowrap; }
 .sect .t { margin: 0; font-weight: 600; line-height: 1.2; letter-spacing: -.012em; color: var(--ink); }
@@ -139,6 +155,7 @@ svg.wires .head, svg.wires circle { fill: var(--connector); stroke: none; }
 .tbtn { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: var(--ground); font-size: .8125rem; font-weight: 500; text-decoration: none; }
 .tbtn svg { width: 15px; height: 15px; color: color-mix(in srgb, var(--ground) 70%, transparent); }
 .tbtn:focus-visible { outline: 2px solid var(--ground); outline-offset: -2px; }
+.tbtn[aria-pressed="true"] { background: color-mix(in srgb, var(--ground) 18%, transparent); }
 
 .empty { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; }
 .empty .t { font-weight: 600; font-size: 1rem; line-height: 1.3; margin: 0 0 6px; }
@@ -235,19 +252,26 @@ function put(tag, cls, x, y, w, h, html) {
 function screen(s, x, y) {
   const shot = shotOf(s.id), fw = width, fh = heightOf(s.id);
   const f = put("button", "frame" + (shot ? "" : " absent"), x, y, fw, fh,
-    shot ? `<img src="${esc(shot.png)}" alt="" decoding="async">` : `<span class="t">Not captured yet</span><span class="w">Ask your coding agent to capture <code>${esc(s.id)}</code>.</span>`);
+    shot ? `<img src="${esc(shot.png)}" alt="" decoding="async">${areasOf(shot)}` : `<span class="t">Not captured yet</span><span class="w">Ask your coding agent to capture <code>${esc(s.id)}</code>.</span>`);
   f.type = "button"; f.dataset.id = s.id;
-  f.setAttribute("aria-label", `${s.name}${shot ? "" : ", not captured yet"}${shot?.landedOn ? `, landed on ${shot.landedOn}` : ""}`);
+  const vs = shot?.compare?.status;
+  f.setAttribute("aria-label", `${s.name}${shot ? "" : ", not captured yet"}${vs === "changed" ? ", changed from live" : vs === "new" ? ", no live capture" : ""}${shot?.landedOn ? `, landed on ${shot.landedOn}` : ""}`);
   if (selected === s.id) f.classList.add("sel");
   const n = document.createElement("div");
   n.className = "fname" + (selected === s.id ? " sel" : "");
   n.dataset.id = s.id;
   const warn = shot?.landedOn ? `<span class="warn" title="The app opened ${esc(shot.landedOn)} instead of ${esc(s.route)}">${icon("danger-triangle-linear")}<span class="w">Landed on ${esc(shot.landedOn)}</span></span>` : "";
-  n.innerHTML = `<div class="row"><span class="who"><span class="n">${esc(s.name)}</span><span class="r">${esc(s.route)}</span></span>${warn}</div>`;
+  const versus = vs === "changed"
+    ? `<span class="warn" title="${shot.compare.areas.length} changed ${shot.compare.areas.length === 1 ? "area" : "areas"}">${icon("routing-2-linear")}<span class="w">Changed from live</span></span>`
+    : vs === "new" ? `<span class="tag">No live capture</span>` : "";
+  n.innerHTML = `<div class="row"><span class="who"><span class="n">${esc(s.name)}</span><span class="r">${esc(s.route)}</span></span>${versus}${warn}</div>`;
   names.appendChild(n);
   labels.push({ n, x, y, w: fw, h: fh });
   return fh;
 }
+/* What changed from live, outlined at each changed element's exact box, or at the changed pixels when no element accounts for them. */
+const areasOf = (shot) => (shot.compare?.areas ?? []).flatMap((a) => (a.changes.length ? a.changes.filter((c) => c.box).map((c) => c.box) : [a]))
+  .map((b) => `<i class="chg" aria-hidden="true" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px"></i>`).join("");
 /* A section: an accessible heading, a surface under its screens, and a header placed with the frame names. */
 function heading(y, title) {
   put("h2", "vh", 0, y, null, null, esc(title));
@@ -388,7 +412,8 @@ function render(keepView) {
       : "Ask your coding agent to set up Atlas for this app. It writes a recipe for each screen and captures it here.";
   }
   if (keepView) apply(); else fitFirst();
-  if (selected && document.querySelector(`.frame[data-id="${CSS.escape(selected)}"]`)) select(selected, true);
+  const wasComparing = comparing; comparing = null;
+  if (selected && document.querySelector(`.frame[data-id="${CSS.escape(selected)}"]`)) { select(selected, true); if (wasComparing === selected) setCompare(selected); }
   else if (selected) deselect();
 }
 
@@ -475,16 +500,57 @@ function markSel() {
   placeNames();
 }
 function select(id, quiet) {
+  if (comparing && comparing !== id) setCompare(null);
   selected = id; markSel();
   const s = byId().get(id);
+  const compare = shotOf(id)?.live ? `<button class="tbtn" type="button" data-act="compare" aria-pressed="${comparing === id}">${icon("sidebar-minimalistic-linear")}Compare with live</button>` : "";
   const open = data.project.liveUrl && s?.route ? `<a class="tbtn" href="${esc(data.project.liveUrl.replace(/\/$/, "") + s.route)}" target="_blank" rel="noopener">${icon("square-share-line-linear")}Open live page</a>` : "";
-  tool.innerHTML = open;
-  tool.hidden = !open;
-  if (!quiet && open && tool.dataset.id !== id) tool.animate?.([{ opacity: 0, translate: "0 -6px" }, { opacity: 1, translate: "0 0" }], { duration: matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 180, easing: "ease-out" });
+  tool.innerHTML = compare + open;
+  tool.hidden = !(compare || open);
+  if (!quiet && !tool.hidden && tool.dataset.id !== id) tool.animate?.([{ opacity: 0, translate: "0 -6px" }, { opacity: 1, translate: "0 0" }], { duration: matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 180, easing: "ease-out" });
   tool.dataset.id = id;
   placeTool();
 }
-function deselect() { selected = null; markSel(); tool.hidden = true; tool.dataset.id = ""; }
+function deselect() { setCompare(null); selected = null; markSel(); tool.hidden = true; tool.dataset.id = ""; }
+
+/* Compare: over the selected screen, live drawn over this branch up to a handle, with the changed areas outlined. */
+let comparing = null, cmpAt = 50;
+function setCompare(id) {
+  world.querySelector(".cmp")?.remove();
+  comparing = null;
+  tool.querySelector('[data-act="compare"]')?.setAttribute("aria-pressed", String(!!id));
+  const shot = id && shotOf(id), at = id && labels.find((l) => l.n.dataset.id === id);
+  if (!shot?.live || !at) return;
+  comparing = id;
+  const el = put("div", "cmp", at.x, at.y, at.w, at.h, `<img src="${esc(shot.png)}" alt="">${areasOf(shot)}
+    <div class="live"><img src="${esc(shot.live.png)}" alt=""></div>
+    <div class="handle" role="slider" tabindex="0" aria-label="Live on the left, this branch on the right" aria-valuemin="0" aria-valuemax="100"><span></span></div>
+    <span class="lab l">Live · ${esc(data.live.commit)}</span><span class="lab r">This branch · ${esc(data.shown.commit)}</span>`);
+  el.dataset.id = id;
+  moveHandle(cmpAt);
+}
+function moveHandle(pct) {
+  cmpAt = Math.min(100, Math.max(0, pct));
+  const el = world.querySelector(".cmp"); if (!el) return;
+  el.querySelector(".live").style.clipPath = `inset(0 ${100 - cmpAt}% 0 0)`;
+  const h = el.querySelector(".handle"); h.style.left = cmpAt + "%";
+  h.setAttribute("aria-valuenow", String(Math.round(cmpAt))); h.setAttribute("aria-valuetext", `${Math.round(cmpAt)}% live`);
+}
+tool.addEventListener("click", (e) => { if (e.target.closest('[data-act="compare"]')) setCompare(comparing ? null : selected); });
+vp.addEventListener("pointerdown", (e) => {
+  const h = e.target.closest(".cmp .handle"); if (!h) return;
+  e.stopPropagation(); h.setPointerCapture(e.pointerId);
+  const box = h.closest(".cmp").getBoundingClientRect();
+  const move = (ev) => moveHandle(((ev.clientX - box.left) / box.width) * 100);
+  move(e);
+  h.addEventListener("pointermove", move);
+  h.addEventListener("pointerup", () => h.removeEventListener("pointermove", move), { once: true });
+}, { capture: true });
+vp.addEventListener("keydown", (e) => {
+  if (!e.target.closest?.(".cmp .handle")) return;
+  const step = { ArrowLeft: -5, ArrowRight: 5, Home: -100, End: 100 }[e.key];
+  if (step != null) { e.preventDefault(); e.stopPropagation(); moveHandle(cmpAt + step); }
+}, { capture: true });
 function placeTool() {
   if (!selected || tool.hidden) return;
   const f = document.querySelector(`.frame[data-id="${CSS.escape(selected)}"]`);
@@ -500,7 +566,7 @@ const pts = new Map(); let drag = null, pinch = null;
 vp.addEventListener("pointerdown", (e) => {
   vp.setPointerCapture(e.pointerId);
   pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (pts.size === 1) drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: false, t: e.target.closest(".frame") };
+  if (pts.size === 1) drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: false, t: e.target.closest(".frame, .cmp") };
   if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), s: view.s }; drag = null; }
 });
 vp.addEventListener("pointermove", (e) => {
@@ -687,7 +753,7 @@ $("connect").addEventListener("click", async (e) => {
 });
 document.addEventListener("pointerdown", (e) => { if (!$("connect").hidden && !$("connect").contains(e.target) && e.target !== $("connectBtn")) toggleConnect(false); });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") { if (!$("connect").hidden) { toggleConnect(false); return; } if (selected) { deselect(); return; } }
+  if (e.key === "Escape") { if (!$("connect").hidden) { toggleConnect(false); return; } if (comparing) { setCompare(null); return; } if (selected) { deselect(); return; } }
   if (e.target.matches("input, textarea, select, [role=listbox]")) return;
   if (e.key === "0") fitAll();
   else if (e.key === "+" || e.key === "=") zoomAt(1.25, innerWidth / 2, innerHeight / 2, true);

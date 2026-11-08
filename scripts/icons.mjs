@@ -5,14 +5,14 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 
-const SOLAR = ["monitor-linear", "smartphone-linear", "square-share-line-linear", "alt-arrow-down-linear", "check-linear", "copy-linear", "danger-triangle-linear", "plug-circle-linear"];
+const SOLAR = ["monitor-linear", "smartphone-linear", "square-share-line-linear", "alt-arrow-down-linear", "check-linear", "copy-linear", "danger-triangle-linear", "plug-circle-linear", "routing-2-linear", "sidebar-minimalistic-linear"];
 /** Viewer name: Simple Icons name. */
 const LOGOS = { "logo-claude": "claude", "logo-codex": "openai", "logo-cursor": "cursor", "logo-other": "modelcontextprotocol" };
 const require = createRequire(import.meta.url);
 const read = (pkg) => JSON.parse(readFileSync(require.resolve(`${pkg}/icons.json`), "utf8"));
 const out = {};
 const add = (set, from, to = from) => {
-  const icon = set.icons[from];
+  const icon = set.icons[from] ?? set.icons[set.aliases?.[from]?.parent];
   if (!icon) throw new Error(`${set.prefix} has no icon named ${from}`);
   out[to] = icon.body;
 };

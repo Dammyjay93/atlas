@@ -4,7 +4,7 @@ See every screen of your web app as the code renders it, compare it with live, a
 
 Atlas is for people who build by prompting coding agents. Agents build many screens and flows quickly, and clicking through all of them to check the result is slow. Atlas puts every screen in one place, shows what differs from live, and turns your marks into tasks that agents pick up.
 
-> **Status:** early. Atlas can set up a project, serve its MCP tools on your computer, connect your coding agent in one step, teach the agent how to write state recipes, and capture each state as a picture and an HTML snapshot. The viewer shows every captured screen and updates while your agent works. Compare and tasks come next. The [build plan](#build-plan) lists the steps.
+> **Status:** early. Atlas can set up a project, serve its MCP tools on your computer, connect your coding agent in one step, teach the agent how to write state recipes, and capture each state as a picture and an HTML snapshot. The viewer shows every captured screen and updates while your agent works. Atlas compares each screen with live, outlines what changed and names the elements in each change. Tasks come next. The [build plan](#build-plan) lists the steps.
 
 ## How it works
 
@@ -62,7 +62,8 @@ For clients that start MCP servers themselves, `atlas mcp` serves the same tools
 | `atlas serve` | Starts Atlas on your computer: the viewer at `/` and the MCP endpoint at `/mcp`. `--port` changes the port from 4317 |
 | `atlas connect` | Shows how to connect each coding agent. `--write <claude\|codex\|cursor>` adds Atlas to that agent |
 | `atlas states` | Lists state recipes, recipes that need repair, and the live and branch commits. Add `--json` for structured output |
-| `atlas capture <state> --base-url <url>` | Captures one state at the current commit. `--cookie name=value` passes a test session; `--width` overrides the widths |
+| `atlas capture <state> --base-url <url>` | Captures one state at the current commit. `--cookie name=value` passes a test session; `--width` overrides the widths; `--live` files the capture under live's commit, for an app started from a copy of the project at live |
+| `atlas compare <state>` | Compares a state's captures at the current commit with its captures at live. Add `--json` for structured output |
 | `atlas mcp` | Serves the MCP tools over stdio |
 
 ## MCP tools
@@ -70,7 +71,8 @@ For clients that start MCP servers themselves, `atlas mcp` serves the same tools
 | Tool | What it does |
 | --- | --- |
 | `atlas_guide` | Explains how Atlas works and how to write state recipes. Agents call it once before their first Atlas task |
-| `atlas_capture` | Captures one state at the current commit: a picture and an HTML snapshot for each width, saved in `.atlas/store/<commit>/<state>/`. Returns a picture of each width for the agent to check |
+| `atlas_capture` | Captures one state at the current commit: a picture and an HTML snapshot for each width, saved in `.atlas/store/<commit>/<state>/`. Returns a picture of each width for the agent to check, and the status against live. `live: true` files the capture under live's commit |
+| `atlas_compare` | Compares a state with live. Returns each width's status, each element that was added, removed, moved or looks different, with its exact box, and pictures of each area at live and at the current commit |
 | `atlas_states` | Lists state recipes, recipes that need repair and why, and the live and branch commits resolved from git |
 
 ## State recipes
@@ -94,6 +96,16 @@ A recipe tells an agent how to reach one state. Agents write a recipe when they 
 
 The agent runs `setup` and `session`. Atlas opens `route` and runs `steps`. `fullPage` captures a long page in full. `leadsTo` draws the flow connectors between screens.
 
+## Compare with live
+
+Atlas compares code with code. Your agent checks out live's commit in a second copy of the project, starts the app there on the same data, and captures the same states with `live: true`. Atlas then compares each state at each width:
+
+- It finds the columns where the pictures differ, then matches their rows as a text diff matches lines. Content that only moved up or down is not a change.
+- Each capture records every visible element with its box. Atlas pairs the elements of live and the current commit in page order, and names each one that was added, removed, moved or looks different, at its exact box. Content carried along by an element that moved is named once, at that element.
+- Each width gets a status: `same`, `changed`, `new` (no live capture) or `missing` (not captured at the current commit).
+
+In the viewer, a changed screen says **Changed from live** and has each changed area outlined. Select it and choose **Compare with live** to drag between live and the current commit.
+
 ## Settings
 
 `.atlas/config.json`:
@@ -114,7 +126,7 @@ Atlas captures with Playwright's browser. When that browser is not installed, At
 1. Repository, CLI, MCP server, settings and state recipes. Then one local program, `atlas serve`, for the viewer and the MCP endpoint, with one-step agent setup through `atlas connect` and instructions built into the server.
 2. Capture: `atlas_capture` saves a picture and an HTML snapshot for each state at the current commit.
 3. Viewer: a canvas of every captured screen and flow that updates live while agents work, a line that shows how fresh the captures are, and a Connect panel.
-4. Compare with live: a slider between live and the branch, with changed areas outlined.
+4. Compare with live: the changed areas of each screen, named for the agent, and a slider between live and the branch in the viewer.
 5. Marks and tasks: mark an area on a screen, and an agent picks it up, fixes it and captures the result for your approval.
 6. Self-check: agents see every screen their change affected before they say they are done.
 7. Variations: compare several versions of a screen side by side and pick one.

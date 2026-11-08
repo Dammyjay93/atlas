@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { capture } from "./capture.js";
+import { compareState } from "./compare.js";
 import { CLIENTS, connectInfo, writeClient, type Client } from "./connect.js";
 import { init } from "./init.js";
 import { serveStdio } from "./mcp.js";
@@ -21,8 +22,9 @@ Usage:
   atlas serve [--port <n>]      Start Atlas on this computer, with the MCP endpoint at /mcp
   atlas connect [--write <app>] Show how to connect a coding agent, or add Atlas to one: ${CLIENTS.join(", ")}
   atlas states [--json]         List state recipes and the live and branch commits
-  atlas capture <state> --base-url <url> [--cookie name=value]... [--width <n>]...
-                                Capture one state at the current commit
+  atlas capture <state> --base-url <url> [--cookie name=value]... [--width <n>]... [--live]
+                                Capture one state at the current commit, or at live with --live
+  atlas compare <state> [--json] Compare a state's captures at the current commit with its captures at live
   atlas mcp                     Serve MCP over stdio, for clients that start the server themselves
 
 Options:
@@ -38,6 +40,10 @@ function openInBrowser(url: string): void {
   const [command, args] = process.platform === "darwin" ? ["open", [url]] : process.platform === "win32" ? ["cmd", ["/c", "start", "", url]] : ["xdg-open", [url]];
   execFile(command, args as string[], () => undefined);
 }
+
+const STATUS_TEXT = { same: "same as live", changed: "changed from live", new: "no live capture", missing: "not captured at this commit" } as const;
+
+const KIND_TEXT = { added: "Added", removed: "Removed", moved: "Moved", changed: "Looks different" } as const;
 
 const out = (text: string) => process.stdout.write(text.endsWith("\n") ? text : text + "\n");
 
@@ -60,6 +66,7 @@ async function main(argv: string[]): Promise<number> {
       cookie: { type: "string", multiple: true },
       width: { type: "string", multiple: true },
       json: { type: "boolean", default: false },
+      live: { type: "boolean", default: false },
       "no-open": { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
       version: { type: "boolean", short: "v", default: false }
@@ -136,17 +143,40 @@ async function main(argv: string[]): Promise<number> {
     }
     case "capture": {
       const id = positionals[1];
-      if (!id || !values["base-url"]) throw new AtlasError('Usage: atlas capture <state> --base-url <url> [--cookie name=value]... [--width <n>]...');
+      if (!id || !values["base-url"]) throw new AtlasError('Usage: atlas capture <state> --base-url <url> [--cookie name=value]... [--width <n>]... [--live]');
       const cookies = (values.cookie ?? []).map((pair) => {
         const at = pair.indexOf("=");
         if (at < 1) throw new AtlasError(`--cookie takes name=value, not "${pair}".`);
         return { name: pair.slice(0, at), value: pair.slice(at + 1) };
       });
       const widths = values.width?.map((w) => portOf(w));
-      const result = await capture(findRoot(here), { state: id, baseUrl: values["base-url"], cookies, ...(widths ? { widths } : {}) });
+      const result = await capture(findRoot(here), { state: id, baseUrl: values["base-url"], cookies, live: values.live, ...(widths ? { widths } : {}) });
       if (values.json) return out(JSON.stringify({ ...result, widths: result.widths.map(({ preview, ...w }) => w) }, null, 2)), 0;
-      out(`Captured ${result.state} at ${result.commit}${result.uncommitted ? " with uncommitted changes" : ""}`);
-      for (const w of result.widths) out(`  ${w.width}: ${w.entry.png}${w.changed ? "" : " (same as before)"}${w.entry.landedOn ? `, landed on ${w.entry.landedOn}` : ""}`);
+      out(`Captured ${result.state} at ${values.live ? "live, " : ""}${result.commit}${result.uncommitted ? " with uncommitted changes" : ""}`);
+      for (const w of result.widths) {
+        const status = w.entry.status >= 200 && w.entry.status < 300 ? "" : `, the page answered HTTP ${w.entry.status}`;
+        out(`  ${w.width}: ${w.entry.png}${w.changed ? "" : " (same as before)"}${w.entry.landedOn ? `, landed on ${w.entry.landedOn}` : ""}${status}`);
+      }
+      return 0;
+    }
+    case "compare": {
+      const id = positionals[1];
+      if (!id) throw new AtlasError("Usage: atlas compare <state> [--json]");
+      const result = compareState(findRoot(here), id);
+      if (values.json) return out(JSON.stringify(result, null, 2)), 0;
+      out(`${result.state}: ${result.branch.commit} against live ${result.live.ref} at ${result.live.commit}`);
+      if (!result.live.captured) out(`  Nothing is captured at live yet. Capture with --live from a copy of the project checked out at ${result.live.commit}.`);
+      for (const w of result.widths) {
+        out(`  ${w.width}: ${STATUS_TEXT[w.status]}${w.moved ? ", and content moved" : ""}`);
+        for (const a of w.areas) {
+          out(`    Changed area at x ${a.x}, y ${a.y}, ${a.w} × ${a.h}`);
+          if (!a.changes.length) out(`      Pixels changed that no element accounts for`);
+          for (const c of a.changes) {
+            const box = c.box ?? c.liveBox;
+            out(`      ${KIND_TEXT[c.kind]}: ${c.name} (${c.tag}${box ? ` at x ${box.x}, y ${box.y}, ${box.w} × ${box.h}` : ""}${c.kind === "removed" ? " on live" : ""})`);
+          }
+        }
+      }
       return 0;
     }
     case "mcp":

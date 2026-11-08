@@ -110,7 +110,7 @@ describe("atlas serve", () => {
       await client.connect(new StreamableHTTPClientTransport(new URL(url)));
       expect(client.getInstructions()).toContain("atlas_guide");
       const { tools } = await client.listTools();
-      expect(tools.map((t) => t.name).sort()).toEqual(["atlas_capture", "atlas_guide", "atlas_states"]);
+      expect(tools.map((t) => t.name).sort()).toEqual(["atlas_capture", "atlas_compare", "atlas_guide", "atlas_states"]);
       const result = await client.callTool({ name: "atlas_states", arguments: {} });
       const [first] = result.content as { type: string; text: string }[];
       expect(JSON.parse(first?.text ?? "{}").states[0].id).toBe("cart");

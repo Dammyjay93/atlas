@@ -7,6 +7,7 @@ export const INSTRUCTIONS = `Atlas keeps a picture of every screen of this proje
 Call atlas_guide once before your first Atlas task in a session.
 Call atlas_states to see the project's state recipes, the live and branch commits, and any recipe that needs repair.
 When you build or change a screen, write or update a recipe for each of its states in .atlas/states/<id>.json, then capture each state with atlas_capture.
+To see what differs from live, capture the same states at live with atlas_capture and live: true, then call atlas_compare.
 Repair every recipe that atlas_states reports as invalid.`;
 
 export const TOPICS = {
@@ -24,8 +25,9 @@ Your part:
 2. When you build or change a screen, write or update the recipe of each state it has.
 3. Capture each of those states with atlas_capture, and look at the pictures it returns.
 4. When a recipe stops working because the app changed, repair it in the same change.
+5. To show what differs from live, capture the same states at live and call atlas_compare. See the compare topic.
 
-Topics: workflow, recipes, capture.`,
+Topics: workflow, recipes, capture, compare.`,
 
   recipes: `How to write a state recipe
 
@@ -70,7 +72,23 @@ For captures that stay the same between runs:
 - If the app shows relative dates, such as "3 days ago", set "time" in .atlas/config.json to a fixed moment, and seed dates relative to it.
 - Add selectors to "hide" in .atlas/config.json for anything that is not part of the product, such as a development overlay.
 
-If the result says landedOn, the app sent the browser somewhere other than the recipe's route, for example to a sign-in page. Check the session and the setup.`
+If the result says landedOn, the app sent the browser somewhere other than the recipe's route, for example to a sign-in page. Check the session and the setup.
+If the result's status is not 200, the page answered with an error, for example 401 when the session cookie is wrong.`,
+
+  compare: `How to compare with live
+
+Live is the code at the ref in .atlas/config.json (liveRef), such as origin/main. Atlas compares code with code, on the same data, so a difference is a change in the code.
+
+1. Call atlas_states to get live's commit.
+2. Check out that commit in a second copy of the project, outside this folder: git worktree add <folder> <commit>. Install its dependencies.
+3. Start the app from that copy on another port, with the same data as this one.
+4. For each state, call atlas_capture with live: true and that address. Atlas uses this project's recipes and files the capture under live's commit.
+5. Capture the same states at this commit as usual.
+6. Call atlas_compare for a state. It returns each width's status, each element that was added, removed, moved or looks different, with its exact box, and pictures of each area at live and at this commit.
+
+Statuses: same, changed, new (no live capture) and missing (not captured at this commit).
+Content that only moved up or down is not a change. Atlas records every visible element at capture, so each change names a real element at its real place. When no element accounts for changed pixels, such as a drawn decoration, the area has no elements and outlines the pixels.
+When live moves to a new commit, capture live again.`
 } as const;
 
 export type Topic = keyof typeof TOPICS;

@@ -11,9 +11,15 @@ export const ConfigSchema = z.object({
   /** The live site's address, for opening a screen on live. */
   liveUrl: z.url().optional(),
   /** Screen widths to capture, in CSS pixels. */
-  widths: z.array(z.number().int().positive()).min(1).default([1440, 390])
+  widths: z.array(z.number().int().positive()).min(1).default([1440, 390]),
+  /** CSS selectors removed before every capture, such as a development overlay. */
+  hide: z.array(z.string().min(1)).default([]),
+  /** A fixed time for the page's clock during capture, so relative dates such as "3 days ago" stay the same between runs. Seed data relative to it. */
+  time: z.iso.datetime({ offset: true }).optional()
 });
 export type Config = z.infer<typeof ConfigSchema>;
+/** The settings as written in the file, where fields with defaults may be left out. */
+export type ConfigFile = z.input<typeof ConfigSchema>;
 
 export class AtlasError extends Error {}
 

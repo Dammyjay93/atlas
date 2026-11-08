@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
+import { capture } from "./capture.js";
 import { CLIENTS, connectInfo, writeClient, type Client } from "./connect.js";
 import { init } from "./init.js";
 import { serveStdio } from "./mcp.js";
@@ -16,6 +17,8 @@ Usage:
   atlas serve [--port <n>]      Start Atlas on this computer, with the MCP endpoint at /mcp
   atlas connect [--write <app>] Show how to connect a coding agent, or add Atlas to one: ${CLIENTS.join(", ")}
   atlas states [--json]         List state recipes and the live and branch commits
+  atlas capture <state> --base-url <url> [--cookie name=value]... [--width <n>]...
+                                Capture one state at the current commit
   atlas mcp                     Serve MCP over stdio, for clients that start the server themselves
 
 Options:
@@ -42,6 +45,9 @@ async function main(argv: string[]): Promise<number> {
       root: { type: "string" },
       port: { type: "string" },
       write: { type: "string" },
+      "base-url": { type: "string" },
+      cookie: { type: "string", multiple: true },
+      width: { type: "string", multiple: true },
       json: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
       version: { type: "boolean", short: "v", default: false }
@@ -96,6 +102,21 @@ async function main(argv: string[]): Promise<number> {
         for (const i of view.invalid) out(`  ${i.file}: ${i.problem}`);
       }
       return view.invalid.length ? 1 : 0;
+    }
+    case "capture": {
+      const id = positionals[1];
+      if (!id || !values["base-url"]) throw new AtlasError('Usage: atlas capture <state> --base-url <url> [--cookie name=value]... [--width <n>]...');
+      const cookies = (values.cookie ?? []).map((pair) => {
+        const at = pair.indexOf("=");
+        if (at < 1) throw new AtlasError(`--cookie takes name=value, not "${pair}".`);
+        return { name: pair.slice(0, at), value: pair.slice(at + 1) };
+      });
+      const widths = values.width?.map((w) => portOf(w));
+      const result = await capture(findRoot(here), { state: id, baseUrl: values["base-url"], cookies, ...(widths ? { widths } : {}) });
+      if (values.json) return out(JSON.stringify({ ...result, widths: result.widths.map(({ preview, ...w }) => w) }, null, 2)), 0;
+      out(`Captured ${result.state} at ${result.commit}${result.uncommitted ? " with uncommitted changes" : ""}`);
+      for (const w of result.widths) out(`  ${w.width}: ${w.entry.png}${w.changed ? "" : " (same as before)"}${w.entry.landedOn ? `, landed on ${w.entry.landedOn}` : ""}`);
+      return 0;
     }
     case "mcp":
       await serveStdio(findRoot(here));

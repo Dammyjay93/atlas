@@ -6,7 +6,7 @@ export const INSTRUCTIONS = `Atlas keeps a picture of every screen of this proje
 
 Call atlas_guide once before your first Atlas task in a session.
 Call atlas_states to see the project's state recipes, the live and branch commits, and any recipe that needs repair.
-When you build or change a screen, write or update a recipe for each of its states in .atlas/states/<id>.json.
+When you build or change a screen, write or update a recipe for each of its states in .atlas/states/<id>.json, then capture each state with atlas_capture.
 Repair every recipe that atlas_states reports as invalid.`;
 
 export const TOPICS = {
@@ -22,9 +22,10 @@ The person you work with builds this product by prompting coding agents like you
 Your part:
 1. Before you start, call atlas_states to see which states exist.
 2. When you build or change a screen, write or update the recipe of each state it has.
-3. When a recipe stops working because the app changed, repair it in the same change.
+3. Capture each of those states with atlas_capture, and look at the pictures it returns.
+4. When a recipe stops working because the app changed, repair it in the same change.
 
-Topics: workflow, recipes.`,
+Topics: workflow, recipes, capture.`,
 
   recipes: `How to write a state recipe
 
@@ -53,7 +54,23 @@ One file for each state: .atlas/states/<id>.json. The id uses lowercase letters,
 - leadsTo: the states a person reaches from this one, and the action that takes them there. Atlas draws these as the flow between screens.
 
 Write one recipe for each state a person can see, including empty, error and loading states where you can hold them still.
-Call atlas_states after you write or change recipes, and fix anything it reports.`
+Call atlas_states after you write or change recipes, and fix anything it reports.`,
+
+  capture: `How to capture a state
+
+1. Prepare the state. Run the recipe's setup to seed the data, and start the app if it is not running.
+2. If the state needs sign-in, run the recipe's session command and pass the cookies it gives you.
+3. Call atlas_capture with the recipe id and the address of the running app (baseUrl).
+4. Look at the pictures it returns. If the page shows the wrong state, fix the setup, the session or the steps, and capture again.
+
+Atlas saves a picture and an HTML snapshot for each width in .atlas/store/<commit>/<state>/. The commit comes from git, so commit your work before you capture when you can; a capture with uncommitted changes is marked as such.
+
+For captures that stay the same between runs:
+- Seed the same data every time.
+- If the app shows relative dates, such as "3 days ago", set "time" in .atlas/config.json to a fixed moment, and seed dates relative to it.
+- Add selectors to "hide" in .atlas/config.json for anything that is not part of the product, such as a development overlay.
+
+If the result says landedOn, the app sent the browser somewhere other than the recipe's route, for example to a sign-in page. Check the session and the setup.`
 } as const;
 
 export type Topic = keyof typeof TOPICS;

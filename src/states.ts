@@ -24,6 +24,8 @@ export const StateSchema = z.strictObject({
   session: z.string().min(1).optional(),
   steps: z.array(StepSchema).optional(),
   widths: z.array(z.number().int().positive()).min(1).optional(),
+  /** Capture the whole page instead of one window's height. For long pages that scroll. */
+  fullPage: z.boolean().optional(),
   leadsTo: z.array(z.strictObject({ state: z.string().min(1), action: z.string().min(1) })).optional()
 });
 export type State = z.infer<typeof StateSchema>;
@@ -66,6 +68,7 @@ export function readStates(root: string): StateList {
     seen.set(parsed.data.id, path);
     list.states.push(parsed.data);
   }
+  list.states.sort((a, b) => a.id.localeCompare(b.id));
   const ids = new Set(list.states.map((s) => s.id));
   for (const state of list.states) {
     for (const edge of state.leadsTo ?? []) {

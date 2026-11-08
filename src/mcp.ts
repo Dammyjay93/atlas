@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { capture } from "./capture.js";
 import { INSTRUCTIONS, TOPICS, type Topic } from "./guide.js";
 import { overview } from "./overview.js";
 import { AtlasError } from "./project.js";
@@ -32,6 +33,44 @@ export function createServer(root: string): McpServer {
     async () => {
       try {
         return text(JSON.stringify(overview(root), null, 2));
+      } catch (error) {
+        if (error instanceof AtlasError) return { isError: true, ...text(error.message) };
+        throw error;
+      }
+    }
+  );
+  server.registerTool(
+    "atlas_capture",
+    {
+      title: "Capture a state",
+      description:
+        "Capture one state at the current commit: a picture and an HTML snapshot for each screen width, saved in .atlas/store. Prepare the state first: run the recipe's setup, start the app, and make a test session if the state needs sign-in. Returns a picture of each width so you can check the result.",
+      inputSchema: {
+        state: z.string().describe("The recipe id, from atlas_states"),
+        baseUrl: z.string().describe("Where you started the app, such as http://localhost:3000"),
+        cookies: z
+          .array(z.object({ name: z.string(), value: z.string(), path: z.string().optional(), httpOnly: z.boolean().optional(), secure: z.boolean().optional(), sameSite: z.enum(["Strict", "Lax", "None"]).optional() }))
+          .optional()
+          .describe("The test session cookies, for states that need sign-in"),
+        widths: z.array(z.number().int().positive()).optional().describe("Screen widths, if they differ from the recipe and the settings")
+      }
+    },
+    async (input) => {
+      try {
+        const result = await capture(root, input);
+        const summary = {
+          state: result.state,
+          commit: result.commit,
+          branch: result.branch,
+          ...(result.uncommitted ? { note: "The project has uncommitted changes, so these captures show more than the commit." } : {}),
+          widths: result.widths.map((w) => ({ width: w.width, changed: w.changed, status: w.entry.status, ...(w.entry.landedOn ? { landedOn: w.entry.landedOn } : {}), png: w.entry.png, html: w.entry.html }))
+        };
+        return {
+          content: [
+            { type: "text" as const, text: JSON.stringify(summary, null, 2) },
+            ...result.widths.map((w) => ({ type: "image" as const, data: w.preview.toString("base64"), mimeType: "image/jpeg" }))
+          ]
+        };
       } catch (error) {
         if (error instanceof AtlasError) return { isError: true, ...text(error.message) };
         throw error;

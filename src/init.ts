@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { AtlasError, type Config } from "./project.js";
+import { AtlasError, type ConfigFile } from "./project.js";
 
 /** The ref the project's remote names as its default branch, such as `origin/main`. */
 function defaultLiveRef(root: string): string {
@@ -24,7 +24,7 @@ function projectName(root: string): string {
 
 export interface InitResult {
   root: string;
-  config: Config;
+  config: ConfigFile;
   created: string[];
 }
 
@@ -35,7 +35,7 @@ export function init(at: string): InitResult {
   const configFile = join(atlas, "config.json");
   if (existsSync(configFile)) throw new AtlasError(`${configFile} already exists.`);
   const created: string[] = [];
-  const config: Config = { name: projectName(root), liveRef: defaultLiveRef(root), widths: [1440, 390] };
+  const config: ConfigFile = { name: projectName(root), liveRef: defaultLiveRef(root), widths: [1440, 390] };
   for (const dir of ["states", "tasks"]) {
     mkdirSync(join(atlas, dir), { recursive: true });
     writeFileSync(join(atlas, dir, ".gitkeep"), "");

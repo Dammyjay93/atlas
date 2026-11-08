@@ -4,7 +4,7 @@ See every screen of your web app as the code renders it, compare it with live, a
 
 Atlas is for people who build by prompting coding agents. Agents build many screens and flows quickly, and clicking through all of them to check the result is slow. Atlas puts every screen in one place, shows what differs from live, and turns your marks into tasks that agents pick up.
 
-> **Status:** early. Atlas can set up a project, serve its MCP tools on your computer, connect your coding agent in one step, and teach the agent how to write state recipes. Capture, the viewer, compare and tasks come next. The [build plan](#build-plan) lists the steps.
+> **Status:** early. Atlas can set up a project, serve its MCP tools on your computer, connect your coding agent in one step, teach the agent how to write state recipes, and capture each state as a picture and an HTML snapshot. The viewer, compare and tasks come next. The [build plan](#build-plan) lists the steps.
 
 ## How it works
 
@@ -67,6 +67,7 @@ For clients that start MCP servers themselves, `atlas mcp` serves the same tools
 | `atlas serve` | Starts Atlas on your computer, with the MCP endpoint at `/mcp`. `--port` changes the port from 4317 |
 | `atlas connect` | Shows how to connect each coding agent. `--write <claude\|codex\|cursor>` adds Atlas to that agent |
 | `atlas states` | Lists state recipes, recipes that need repair, and the live and branch commits. Add `--json` for structured output |
+| `atlas capture <state> --base-url <url>` | Captures one state at the current commit. `--cookie name=value` passes a test session; `--width` overrides the widths |
 | `atlas mcp` | Serves the MCP tools over stdio |
 
 ## MCP tools
@@ -74,6 +75,7 @@ For clients that start MCP servers themselves, `atlas mcp` serves the same tools
 | Tool | What it does |
 | --- | --- |
 | `atlas_guide` | Explains how Atlas works and how to write state recipes. Agents call it once before their first Atlas task |
+| `atlas_capture` | Captures one state at the current commit: a picture and an HTML snapshot for each width, saved in `.atlas/store/<commit>/<state>/`. Returns a picture of each width for the agent to check |
 | `atlas_states` | Lists state recipes, recipes that need repair and why, and the live and branch commits resolved from git |
 
 ## State recipes
@@ -95,7 +97,22 @@ A recipe tells an agent how to reach one state. Agents write a recipe when they 
 }
 ```
 
-The agent runs `setup` and `session`. Atlas opens `route` and runs `steps`. `leadsTo` draws the flow connectors between screens.
+The agent runs `setup` and `session`. Atlas opens `route` and runs `steps`. `fullPage` captures a long page in full. `leadsTo` draws the flow connectors between screens.
+
+## Settings
+
+`.atlas/config.json`:
+
+| Field | What it does |
+| --- | --- |
+| `name` | The project's name |
+| `liveRef` | The git ref the project deploys from, such as `origin/main`. Atlas resolves it on every run |
+| `liveUrl` | The live site's address |
+| `widths` | Screen widths to capture, in CSS pixels. Default: 1440 and 390 |
+| `hide` | CSS selectors removed before each capture, such as a development overlay |
+| `time` | A fixed time for the page's clock, so relative dates stay the same between captures |
+
+Atlas captures with Playwright's browser. When that browser is not installed, Atlas uses Google Chrome. If neither is available, run `npx playwright install chromium-headless-shell`.
 
 ## Build plan
 

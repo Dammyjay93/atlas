@@ -1,0 +1,29 @@
+{
+  "name": "atlas",
+  "version": "0.0.0",
+  "private": true,
+  "description": "See every screen of your web app as the code renders it, compare it with live, and send changes back to your coding agents.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "atlas": "dist/cli.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "pnpm build && vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "playwright": "^1.65.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}

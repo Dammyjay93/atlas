@@ -3,9 +3,9 @@ import { createHash } from "node:crypto";
 import { chromium, type Browser } from "playwright";
 import { currentBranch, readConfig, resolveRef, AtlasError } from "./project.js";
 import { snapshotPage } from "./snapshot.js";
-import { readStates } from "./states.js";
+import { readStates, type State } from "./states.js";
 import { saveCapture, type Entry } from "./store.js";
-import { layoutMap } from "./text-map.js";
+import { layoutMap, type LayoutItem } from "./text-map.js";
 
 export interface CookieInput {
   name: string;
@@ -48,7 +48,7 @@ export interface CaptureResult {
 const heightFor = (width: number) => (width >= 768 ? 900 : 844);
 
 /** Launches Playwright's own browser, or the Chrome already on this computer when Playwright's is not installed. */
-async function launch(): Promise<Browser> {
+export async function launch(): Promise<Browser> {
   try {
     return await chromium.launch();
   } catch (bundled) {
@@ -63,7 +63,7 @@ async function launch(): Promise<Browser> {
 }
 
 /** True when the project has uncommitted changes outside .atlas/, so a capture shows more than its commit. */
-function hasUncommitted(root: string): boolean {
+export function hasUncommitted(root: string): boolean {
   try {
     return execFileSync("git", ["-C", root, "status", "--porcelain", "--", ".", ":(exclude).atlas"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim().length > 0;
   } catch {
@@ -71,38 +71,43 @@ function hasUncommitted(root: string): boolean {
   }
 }
 
-/**
- * Captures one state at each width: a picture at twice the pixel density, and a self-contained HTML snapshot.
- * The agent has already prepared the state (seeded data, started the app, made a test session).
- */
-export async function capture(root: string, input: CaptureInput): Promise<CaptureResult> {
-  const config = readConfig(root);
-  const { states } = readStates(root);
-  const state = states.find((s) => s.id === input.state);
-  if (!state) throw new AtlasError(`No valid recipe with id "${input.state}". Recipes: ${states.map((s) => s.id).join(", ") || "none"}. Call atlas_states to see recipes that need repair.`);
-  const commit = input.live ? resolveRef(root, config.liveRef) : resolveRef(root, "HEAD");
-  if (!commit) {
-    throw new AtlasError(input.live ? `Live's ref "${config.liveRef}" does not resolve to a commit. Fetch it, or set "liveRef" in .atlas/config.json.` : "The project has no commit yet. Commit once, then capture.");
-  }
-  let base: URL;
+/** One width of one state, taken but not yet saved. */
+export interface Shot {
+  width: number;
+  png: Buffer;
+  preview: Buffer;
+  html: string;
+  layout: LayoutItem[];
+  route: string;
+  landedOn?: string;
+  status: number;
+  capturedAt: string;
+}
+
+/** The address of the app the agent started, checked. */
+export function baseOf(baseUrl: string): URL {
   try {
-    base = new URL(input.baseUrl);
+    return new URL(baseUrl);
   } catch {
-    throw new AtlasError(`baseUrl "${input.baseUrl}" is not a web address, such as http://localhost:3000.`);
+    throw new AtlasError(`baseUrl "${baseUrl}" is not a web address, such as http://localhost:3000.`);
   }
-  const at = { commit, branch: input.live ? config.liveRef : currentBranch(root) };
-  const uncommitted = input.live ? false : hasUncommitted(root);
-  const widths = input.widths ?? state.widths ?? config.widths;
-  const browser = await launch();
-  const results: WidthResult[] = [];
+}
+
+/**
+ * Opens one state at each width in an open browser and takes a picture at twice the pixel density, a smaller picture for the
+ * agent, the visible elements and a self-contained HTML snapshot. Saving is up to the caller.
+ */
+export async function shoot(browser: Browser, root: string, state: State, base: URL, cookies: CookieInput[] | undefined, widths: number[]): Promise<Shot[]> {
+  const config = readConfig(root);
+  const shots: Shot[] = [];
   try {
     for (const width of widths) {
       const context = await browser.newContext({ viewport: { width, height: heightFor(width) }, deviceScaleFactor: 2, reducedMotion: "reduce" });
       try {
         // Set by host and path, not by URL: Playwright marks a cookie set by URL as secure only on https, which rejects
         // secure and __Host- session cookies on http://localhost, where browsers do allow them.
-        if (input.cookies?.length) {
-          await context.addCookies(input.cookies.map((c) => ({ ...c, domain: base.hostname, path: c.path ?? "/", secure: c.secure ?? (base.protocol === "https:" || c.name.startsWith("__Host-") || c.name.startsWith("__Secure-")) })));
+        if (cookies?.length) {
+          await context.addCookies(cookies.map((c) => ({ ...c, domain: base.hostname, path: c.path ?? "/", secure: c.secure ?? (base.protocol === "https:" || c.name.startsWith("__Host-") || c.name.startsWith("__Secure-")) })));
         }
         const page = await context.newPage();
         if (config.time) await page.clock.setFixedTime(new Date(config.time));
@@ -117,25 +122,20 @@ export async function capture(root: string, input: CaptureInput): Promise<Captur
         }
         if (state.steps?.length) await page.waitForLoadState("networkidle");
         for (const selector of config.hide) await page.locator(selector).evaluateAll((els) => els.forEach((el) => el.remove()));
-        const shot = { fullPage: state.fullPage ?? false, animations: "disabled" as const, caret: "hide" as const };
-        const png = await page.screenshot({ ...shot, type: "png" });
-        const preview = await page.screenshot({ ...shot, type: "jpeg", quality: 70, scale: "css" });
+        const opts = { fullPage: state.fullPage ?? false, animations: "disabled" as const, caret: "hide" as const };
+        const png = await page.screenshot({ ...opts, type: "png" });
+        const preview = await page.screenshot({ ...opts, type: "jpeg", quality: 70, scale: "css" });
         // Before the snapshot, which rewrites the page's styles and so its layout.
-        const layout = await page.evaluate(layoutMap, shot.fullPage);
+        const layout = await page.evaluate(layoutMap, opts.fullPage);
         const html = await page.evaluate(snapshotPage);
         const landed = new URL(page.url());
-        const entry = {
-          hash: createHash("sha256").update(png).digest("hex"),
+        shots.push({
+          width, png, preview, html, layout,
           route: state.route,
           ...(landed.pathname + landed.search !== target.pathname + target.search ? { landedOn: landed.pathname + landed.search } : {}),
           status: response?.status() ?? 0,
-          capturedAt: new Date().toISOString(),
-          uncommitted
-        };
-        const previous = saveCapture(root, at, state.id, width, { png, html, layout }, entry);
-        const dir = `.atlas/store/${commit}/${state.id}/${width}`;
-        const saved: Entry = { png: `${dir}.png`, html: `${dir}.html`, layout: `${dir}.layout.json`, ...entry };
-        results.push({ width, entry: saved, changed: previous?.hash !== entry.hash, preview });
+          capturedAt: new Date().toISOString()
+        });
       } finally {
         await context.close();
       }
@@ -143,8 +143,38 @@ export async function capture(root: string, input: CaptureInput): Promise<Captur
   } catch (error) {
     if (error instanceof AtlasError) throw error;
     throw new AtlasError(`Capturing "${state.id}" failed: ${(error as Error).message.split("\n")[0]}`);
+  }
+  return shots;
+}
+
+/**
+ * Captures one state at each width and files it in the store under the current commit, or live's commit with `live`.
+ * The agent has already prepared the state (seeded data, started the app, made a test session).
+ */
+export async function capture(root: string, input: CaptureInput): Promise<CaptureResult> {
+  const config = readConfig(root);
+  const { states } = readStates(root);
+  const state = states.find((s) => s.id === input.state);
+  if (!state) throw new AtlasError(`No valid recipe with id "${input.state}". Recipes: ${states.map((s) => s.id).join(", ") || "none"}. Call atlas_states to see recipes that need repair.`);
+  const commit = input.live ? resolveRef(root, config.liveRef) : resolveRef(root, "HEAD");
+  if (!commit) {
+    throw new AtlasError(input.live ? `Live's ref "${config.liveRef}" does not resolve to a commit. Fetch it, or set "liveRef" in .atlas/config.json.` : "The project has no commit yet. Commit once, then capture.");
+  }
+  const base = baseOf(input.baseUrl);
+  const at = { commit, branch: input.live ? config.liveRef : currentBranch(root) };
+  const uncommitted = input.live ? false : hasUncommitted(root);
+  const browser = await launch();
+  let shots: Shot[];
+  try {
+    shots = await shoot(browser, root, state, base, input.cookies, input.widths ?? state.widths ?? config.widths);
   } finally {
     await browser.close();
   }
+  const results = shots.map((s): WidthResult => {
+    const entry = { hash: createHash("sha256").update(s.png).digest("hex"), route: s.route, ...(s.landedOn ? { landedOn: s.landedOn } : {}), status: s.status, capturedAt: s.capturedAt, uncommitted };
+    const previous = saveCapture(root, at, state.id, s.width, { png: s.png, html: s.html, layout: s.layout }, entry);
+    const dir = `.atlas/store/${commit}/${state.id}/${s.width}`;
+    return { width: s.width, entry: { png: `${dir}.png`, html: `${dir}.html`, layout: `${dir}.layout.json`, ...entry }, changed: previous?.hash !== entry.hash, preview: s.preview };
+  });
   return { state: state.id, commit, branch: at.branch, uncommitted, widths: results };
 }

@@ -134,7 +134,9 @@ svg.links circle.on { stroke: var(--sel); }
 .side.open .stoggle { order: 2; }
 /* The branch field is inset 12 px, the same as the text above it: its left edge lines up with "Atlas". */
 .side.open .meta { order: 3; flex-basis: 100%; flex-wrap: wrap; margin: 0 8px 4px; }
-.side.open .ver { flex: 1; padding: 0 10px; }
+/* The field keeps its whole row; a freshness warning or the agent's activity wraps underneath it. */
+.side.open .ver { flex: 1 0 100%; padding: 0 10px; }
+.side.open .meta > .warn, .side.open .meta > .act { margin: 6px 0 0; }
 .side.open .ver .b { flex: 1; }
 .slist { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px; border-top: .5px solid var(--hairline); }
 .slist ul { list-style: none; margin: 0; padding: 0; }
@@ -835,7 +837,9 @@ function showActivity(a) {
   const name = byId().get(a.state)?.name ?? a.state ?? "a screen";
   const el = $("act");
   clearTimeout(actTimer);
-  el.innerHTML = a.tool === "atlas_task_update"
+  el.innerHTML = a.tool === "atlas_check"
+    ? (a.phase === "start" ? "<i></i>Checking every screen" : a.phase === "done" ? "Checked every screen" : "The check failed")
+    : a.tool === "atlas_task_update"
     ? (a.phase === "start" ? "<i></i>Updating a task" : a.phase === "done" ? "Updated a task" : "A task update failed")
     : a.phase === "start" ? `<i></i>Capturing ${esc(name)}` : a.phase === "done" ? `Captured ${esc(name)}` : `Capture of ${esc(name)} failed`;
   el.hidden = false;

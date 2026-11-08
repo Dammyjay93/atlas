@@ -9,7 +9,7 @@ import { readManifest, type Entry } from "./store.js";
 import type { LayoutItem } from "./text-map.js";
 
 /** Bump when the method changes, so cached results are worked out again. */
-const METHOD = 9;
+const METHOD = 10;
 /** Row signatures: brightness in blocks this many pixels wide, rounded to steps this far apart. Text and controls change them; faint texture does not. */
 const BLOCK = 32;
 const LEVEL = 32;
@@ -244,7 +244,11 @@ const union = (boxes: Box[]): Box => {
   const x = Math.min(...boxes.map((b) => b.x)), y = Math.min(...boxes.map((b) => b.y));
   return { x, y, w: Math.max(...boxes.map((b) => b.x + b.w)) - x, h: Math.max(...boxes.map((b) => b.y + b.h)) - y };
 };
-const nameOf = (t: LayoutItem) => t.text || (t.tag === "svg" ? "icon" : t.tag === "img" ? "image" : t.tag);
+/** What to call an element: its text or accessible name; a background box by the start of what it holds; an icon or image by its kind. */
+const nameOf = (t: LayoutItem) => {
+  if (t.surface) return t.text ? `box around “${t.text.length > 24 ? `${t.text.slice(0, 24).trimEnd()}…` : t.text}”` : `${t.tag} box`;
+  return t.text || (t.tag === "svg" ? "icon" : t.tag === "img" ? "image" : t.tag);
+};
 const boxOf = (t: LayoutItem): Box => ({ x: t.x, y: t.y, w: t.w, h: t.h });
 
 /**
@@ -287,37 +291,44 @@ function changesIn(live: Picture, branch: Picture, g: Group, band: { x0: number;
   const k = branch.k, x0 = band.x0 / k, x1 = band.x1 / k;
   const rows = g.parts.filter((p) => !p.removal);
   const shift = (g.l0 - g.b0) / k;
-  const found: (Change & { dx: number; dy: number; at: Box })[] = [];
+  const found: (Change & { dx: number; dy: number; at: Box; surface: boolean })[] = [];
   const paired = new Set(pairs.values());
   branchItems.forEach((b, index) => {
     if (!rows.some((p) => overlaps(b, x0, x1, p.b0 / k, p.b1 / k))) return;
     const name = nameOf(b), at = boxOf(b);
     const li = pairs.get(index);
     const l = li === undefined ? undefined : liveItems[li];
-    if (!l) return void found.push({ kind: "added", name, tag: b.tag, box: at, dx: 0, dy: 0, at });
+    const surface = !!b.surface;
+    if (!l) return void found.push({ kind: "added", name, tag: b.tag, box: at, dx: 0, dy: 0, at, surface });
     const dx = b.x - l.x, dy = b.y - l.y + shift;
-    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) return void found.push({ kind: "moved", name, tag: b.tag, box: at, liveBox: boxOf(l), dx, dy, at });
+    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) return void found.push({ kind: "moved", name, tag: b.tag, box: at, liveBox: boxOf(l), dx, dy, at, surface });
     const inside = branchItems.filter((c) => contains(b, c));
-    if (looksDifferent(live, branch, b, l, inside)) found.push({ kind: "changed", name, tag: b.tag, box: at, liveBox: boxOf(l), dx: 0, dy: 0, at });
+    if (looksDifferent(live, branch, b, l, inside)) found.push({ kind: "changed", name, tag: b.tag, box: at, liveBox: boxOf(l), dx: 0, dy: 0, at, surface });
   });
   liveItems.forEach((l, index) => {
     if (paired.has(index) || !overlaps(l, x0, x1, g.l0 / k, g.l1 / k)) return;
-    found.push({ kind: "removed", name: nameOf(l), tag: l.tag, liveBox: boxOf(l), dx: 0, dy: 0, at: boxOf(l) });
+    found.push({ kind: "removed", name: nameOf(l), tag: l.tag, liveBox: boxOf(l), dx: 0, dy: 0, at: boxOf(l), surface: !!l.surface });
   });
   const shape = found.filter((c) => c.kind !== "changed");
-  const movedOrAdded = found.filter((c) => c.kind === "moved" || c.kind === "added");
+  const seen = new Set<string>();
   return found
     .filter((c) => {
-      // Content inside an element that moved or was added goes with it, so the outer element names the change.
-      if (c.kind !== "removed" && c.kind !== "added" && movedOrAdded.some((o) => contains(o.at, c.at))) return false;
+      // Content carried by an element that was added, or that moved by exactly the same amount, goes with it: the outer element names it.
+      if (c.kind !== "removed" && c.kind !== "added" && found.some((o) => o !== c && contains(o.at, c.at) && (o.kind === "added" || (o.kind === "moved" && c.kind === "moved" && o.dx === c.dx && o.dy === c.dy)))) return false;
+      // A background box is named only when nothing inside it explains the change.
+      if (c.surface && found.some((o) => o !== c && !o.surface && contains(c.at, o.at))) return false;
       // A container that looks different only because of a change inside it is named by that change.
       if (c.kind === "changed" && shape.some((o) => contains(c.at, o.at))) return false;
       // Of nested containers that look different, the outermost names the change.
       if (c.kind === "changed" && found.some((o) => o.kind === "changed" && contains(o.at, c.at))) return false;
+      // The same element named twice, such as two nested boxes with the same text, is listed once.
+      const key = `${c.kind} ${c.name}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
       return true;
     })
     .slice(0, MAX_CHANGES)
-    .map(({ dx, dy, at, ...change }) => change);
+    .map(({ dx, dy, at, surface, ...change }) => change);
 }
 
 function work(root: string, cssWidth: number, liveEntry: Entry, branchEntry: Entry): Comparison {

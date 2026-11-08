@@ -63,6 +63,7 @@ For clients that start MCP servers themselves, `atlas mcp` serves the same tools
 | `atlas connect` | Shows how to connect each coding agent. `--write <claude\|codex\|cursor>` adds Atlas to that agent |
 | `atlas states` | Lists state recipes, recipes that need repair, and the live and branch commits. Add `--json` for structured output |
 | `atlas capture <state> --base-url <url>` | Captures one state at the current commit. `--cookie name=value` passes a test session; `--width` overrides the widths; `--live` files the capture under live's commit, for an app started from a copy of the project at live |
+| `atlas check --base-url <url>` | Captures every state at your current code and lists the screens that changed since before your change. `--cookie name=value` passes a test session |
 | `atlas tasks` | Lists the changes you asked for. `--status` picks one status; add `--json` for structured output |
 | `atlas compare <state>` | Compares a state's captures at the current commit with its captures at live. Add `--json` for structured output |
 | `atlas mcp` | Serves the MCP tools over stdio |
@@ -74,6 +75,7 @@ For clients that start MCP servers themselves, `atlas mcp` serves the same tools
 | `atlas_guide` | Explains how Atlas works and how to write state recipes. Agents call it once before their first Atlas task |
 | `atlas_capture` | Captures one state at the current commit: a picture and an HTML snapshot for each width, saved in `.atlas/store/<commit>/<state>/`. Returns a picture of each width for the agent to check, and the status against live. `live: true` files the capture under live's commit |
 | `atlas_compare` | Compares a state with live. Returns each width's status, each element that was added, removed, moved or looks different, with its exact box, and pictures of each area at live and at the current commit |
+| `atlas_check` | Before an agent says a change is done: captures every state and lists every screen the change touched, including ones it did not mean to change, with the changed elements and pictures before and now. It replaces no captures |
 | `atlas_tasks` | Lists the changes the person asked for, each with their words, the marked box, the element under it, its history and a picture with the box drawn on it. `status: approved` lists decisions to build from |
 | `atlas_task_update` | Sets a task to `in-progress`, or to `ready-for-review` with a note once the agent has captured the state again. Atlas attaches that capture as the after picture |
 | `atlas_states` | Lists state recipes, recipes that need repair and why, and the live and branch commits resolved from git |
@@ -109,6 +111,10 @@ Atlas compares code with code. Your agent checks out live's commit in a second c
 
 In the viewer, a changed screen says **Changed from live** and has each changed area outlined. Select it and choose **Compare with live** to drag between live and the current commit.
 
+## Check before done
+
+Before your agent says a change is done, it calls `atlas_check`. Atlas captures every state at the agent's current code and compares each with its capture from before the change: this commit's captures while the change is uncommitted, or the newest earlier commit's once it is committed. The agent sees every screen the change touched, including screens it did not mean to change, and names what moved, appeared, disappeared or looks different. The check keeps its captures apart, so it never replaces a commit's captures.
+
 ## Tasks
 
 In the viewer, select a screen and choose **Ask for a change**. Drag on the screen to mark a part, write what should change, and choose **Send to agent**. Atlas saves the request in `.atlas/tasks/<id>.md`, with the box, the element under it and the commit you marked. Commit these files, so every agent and person sees the same tasks and their history.
@@ -126,7 +132,7 @@ A task moves from `open` to `in-progress` to `ready-for-review`, which the agent
 | `liveUrl` | The live site's address |
 | `widths` | Screen widths to capture, in CSS pixels. Default: 1440 and 390 |
 | `hide` | CSS selectors removed before each capture, such as a development overlay |
-| `time` | A fixed time for the page's clock, so relative dates stay the same between captures |
+| `time` | A fixed time for the browser's clock during capture. It keeps dates the page works out itself the same between captures. Dates the server works out, such as "Posted 3 days ago", follow the server's clock: seed them relative to the current time in the recipe's `setup` |
 
 Atlas captures with Playwright's browser. When that browser is not installed, Atlas uses Google Chrome. If neither is available, run `npx playwright install chromium-headless-shell`.
 

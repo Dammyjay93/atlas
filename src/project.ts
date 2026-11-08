@@ -14,7 +14,7 @@ export const ConfigSchema = z.object({
   widths: z.array(z.number().int().positive()).min(1).default([1440, 390]),
   /** CSS selectors removed before every capture, such as a development overlay. */
   hide: z.array(z.string().min(1)).default([]),
-  /** A fixed time for the page's clock during capture, so relative dates such as "3 days ago" stay the same between runs. Seed data relative to it. */
+  /** A fixed time for the browser's clock during capture. Dates the server works out follow the server's clock instead, so seed those relative to the current time. */
   time: z.iso.datetime({ offset: true }).optional()
 });
 export type Config = z.infer<typeof ConfigSchema>;

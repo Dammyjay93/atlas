@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { capture } from "./capture.js";
+import { check } from "./check.js";
 import { compareState } from "./compare.js";
 import { readTasks, STATUSES } from "./tasks.js";
 import { CLIENTS, connectInfo, writeClient, type Client } from "./connect.js";
@@ -25,6 +26,8 @@ Usage:
   atlas states [--json]         List state recipes and the live and branch commits
   atlas capture <state> --base-url <url> [--cookie name=value]... [--width <n>]... [--live]
                                 Capture one state at the current commit, or at live with --live
+  atlas check --base-url <url> [--cookie name=value]... [--json]
+                                Capture every state and list the screens that changed since before your change
   atlas tasks [--status <s>] [--json]
                                 List the changes the person asked for: ${STATUSES.join(", ")}
   atlas compare <state> [--json] Compare a state's captures at the current commit with its captures at live
@@ -162,6 +165,22 @@ async function main(argv: string[]): Promise<number> {
         out(`  ${w.width}: ${w.entry.png}${w.changed ? "" : " (same as before)"}${w.entry.landedOn ? `, landed on ${w.entry.landedOn}` : ""}${status}`);
       }
       return 0;
+    }
+    case "check": {
+      if (!values["base-url"]) throw new AtlasError("Usage: atlas check --base-url <url> [--cookie name=value]... [--json]");
+      const cookies = (values.cookie ?? []).map((pair) => {
+        const at = pair.indexOf("=");
+        if (at < 1) throw new AtlasError(`--cookie takes name=value, not "${pair}".`);
+        return { name: pair.slice(0, at), value: pair.slice(at + 1) };
+      });
+      const result = await check(findRoot(here), { baseUrl: values["base-url"], cookies });
+      if (values.json) return out(JSON.stringify(result, null, 2)), 0;
+      out(`Checked ${result.head.commit}${result.head.uncommitted ? " with uncommitted changes" : ""} against ${result.base?.commit ?? "nothing (no earlier captures)"}`);
+      for (const w of result.widths) {
+        out(`  ${w.state} at ${w.width}: ${w.status}${w.problem ? `: ${w.problem}` : ""}`);
+        for (const line of new Set(w.areas.flatMap((a) => a.changes.map((c) => `${KIND_TEXT[c.kind]}: ${c.name}`)))) out(`    ${line}`);
+      }
+      return result.widths.some((w) => w.status === "failed") ? 1 : 0;
     }
     case "tasks": {
       if (values.status && !(STATUSES as readonly string[]).includes(values.status)) throw new AtlasError(`--status takes one of: ${STATUSES.join(", ")}.`);

@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { capture } from "./capture.js";
+import { check } from "./check.js";
 import { compareState, cropPicture, type StateComparison } from "./compare.js";
 import { beforeOf, readTasks, STATUSES, updateTask, type Task } from "./tasks.js";
 import { INSTRUCTIONS, TOPICS, type Topic } from "./guide.js";
@@ -17,6 +18,8 @@ const MAX_AREA_PICTURES = 3;
 const CROP_MARGIN = 24;
 const CROP_MAX_HEIGHT = 480;
 
+/** Most changed areas returned as pictures by one check. */
+const MAX_CHECK_PICTURES = 4;
 /** Most tasks returned with a picture in one call. */
 const MAX_TASK_PICTURES = 5;
 /** Space around a marked box in its picture, in CSS pixels. */
@@ -174,6 +177,58 @@ export function createServer(root: string, onActivity: (activity: Activity) => v
           content: [{ type: "text" as const, text: JSON.stringify(summary, null, 2) + (order.length ? `\n\nPictures, in order:\n${order.join("\n")}` : "") }, ...pictures]
         };
       } catch (error) {
+        if (error instanceof AtlasError) return { isError: true, ...text(error.message) };
+        throw error;
+      }
+    }
+  );
+  server.registerTool(
+    "atlas_check",
+    {
+      title: "Check every screen",
+      description:
+        "Before you say a change is done: captures every state at your current code and compares each with its capture before your change, so you see every screen your change touched, including screens you did not mean to change. Start the app with your change first, and run each recipe's setup. Returns each state's status (same, changed, new, failed), the elements that changed, and pictures of each changed area before and now. Fix any change you did not intend, or tell the person why it is expected. It replaces no captures.",
+      inputSchema: {
+        baseUrl: z.string().describe("Where you started the app with your change, such as http://localhost:3000"),
+        cookies: z
+          .array(z.object({ name: z.string(), value: z.string(), path: z.string().optional(), httpOnly: z.boolean().optional(), secure: z.boolean().optional(), sameSite: z.enum(["Strict", "Lax", "None"]).optional() }))
+          .optional()
+          .describe("The test session cookies, for states that need sign-in"),
+        base: z.string().optional().describe("A commit or ref to compare with, if not the captures from before your change")
+      }
+    },
+    async (input) => {
+      onActivity({ tool: "atlas_check", phase: "start" });
+      try {
+        const result = await check(root, input);
+        onActivity({ tool: "atlas_check", phase: "done" });
+        const by = (status: string) => result.widths.filter((w) => w.status === status);
+        const summary = {
+          base: result.base?.commit ?? "none: nothing was captured before this change",
+          head: result.head,
+          changed: by("changed").map(({ state, name, width, areas }) => ({ state, name, width, changes: [...new Set(areas.flatMap((a) => (a.changes.length ? a.changes.map((c) => `${c.kind}: ${c.name}`) : ["pixels changed that no element accounts for"])))] })),
+          failed: by("failed").map(({ state, width, problem }) => ({ state, width, problem })),
+          new: by("new").map(({ state, width }) => ({ state, width })),
+          same: by("same").map(({ state, width }) => `${state} at ${width}`),
+          next: by("changed").length
+            ? "Look at each changed state. Fix any change you did not mean to make, or tell the person why it is expected, before you say you are done."
+            : "No screen changed. If your change should show on a screen, check that it has a recipe and that the app runs your code."
+        };
+        const pictures: { type: "image"; data: string; mimeType: string }[] = [];
+        const order: string[] = [];
+        for (const w of by("changed")) {
+          for (const a of w.areas) {
+            if (order.length >= MAX_CHECK_PICTURES || !w.before || !w.now) break;
+            const x = Math.min(a.x, a.live.x) - CROP_MARGIN, width = Math.max(a.x + a.w, a.live.x + a.live.w) - x + CROP_MARGIN;
+            const top = Math.min(a.y, a.live.y) - CROP_MARGIN, height = Math.min(CROP_MAX_HEIGHT, Math.max(a.h, a.live.h) + 2 * CROP_MARGIN) + Math.abs(a.y - a.live.y);
+            pictures.push({ type: "image", data: cropPicture(root, w.before, w.width, { x, y: top, w: width, h: height }).toString("base64"), mimeType: "image/png" });
+            pictures.push({ type: "image", data: cropPicture(root, w.now, w.width, { x, y: top, w: width, h: height }).toString("base64"), mimeType: "image/png" });
+            order.push(`${w.state} at ${w.width}: before, then now`);
+          }
+        }
+        return { content: [{ type: "text" as const, text: JSON.stringify(summary, null, 2) + (order.length ? `\n\nPictures, in order:\n${order.join("\n")}` : "") }, ...pictures] };
+      } catch (error) {
+        onActivity({ tool: "atlas_check", phase: "failed" });
         if (error instanceof AtlasError) return { isError: true, ...text(error.message) };
         throw error;
       }

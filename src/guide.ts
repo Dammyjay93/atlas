@@ -6,9 +6,10 @@ export const INSTRUCTIONS = `Atlas keeps a picture of every screen of this proje
 
 Call atlas_guide once before your first Atlas task in a session.
 Call atlas_states to see the project's state recipes, the live and branch commits, and any recipe that needs repair.
-Call atlas_tasks to see the changes the person asked for, and work through them with atlas_task_update.
+Call atlas_tasks to see the changes the person asked for, and work through them with atlas_task_update. When a request is unclear, ask the person in your session before you change anything; do not guess.
 When you build or change a screen, write or update a recipe for each of its states in .atlas/states/<id>.json, then capture each state with atlas_capture.
 To see what differs from live, capture the same states at live with atlas_capture and live: true, then call atlas_compare.
+Before you say a change is done, call atlas_check and look at every screen it reports as changed. Fix any change you did not mean to make, or tell the person why it is expected.
 Repair every recipe that atlas_states reports as invalid.`;
 
 export const TOPICS = {
@@ -27,7 +28,8 @@ Your part:
 3. Capture each of those states with atlas_capture, and look at the pictures it returns.
 4. When a recipe stops working because the app changed, repair it in the same change.
 5. To show what differs from live, capture the same states at live and call atlas_compare. See the compare topic.
-6. The person marks what should change on a screen. Each mark is a task: call atlas_tasks and work through them. See the tasks topic.
+6. Before you say a change is done, call atlas_check. It captures every state and shows every screen your change touched, including ones you did not mean to change.
+7. The person marks what should change on a screen. Each mark is a task: call atlas_tasks and work through them. See the tasks topic.
 
 Topics: workflow, recipes, capture, compare, tasks.`,
 
@@ -71,7 +73,7 @@ Atlas saves a picture and an HTML snapshot for each width in .atlas/store/<commi
 
 For captures that stay the same between runs:
 - Seed the same data every time.
-- If the app shows relative dates, such as "3 days ago", set "time" in .atlas/config.json to a fixed moment, and seed dates relative to it.
+- If the app shows relative dates, such as "3 days ago", make the recipe's setup seed those dates relative to the current time, so they read the same on every run. Setting "time" in .atlas/config.json only freezes the browser's clock; dates the server works out still follow the server's clock.
 - Add selectors to "hide" in .atlas/config.json for anything that is not part of the product, such as a development overlay.
 
 If the result says landedOn, the app sent the browser somewhere other than the recipe's route, for example to a sign-in page. Check the session and the setup.
@@ -97,10 +99,11 @@ When live moves to a new commit, capture live again.`,
 The person marks a part of a screen in the Atlas viewer and writes what should change. Each mark is a task in .atlas/tasks/<id>.md, committed with the project.
 
 1. Call atlas_tasks. Each task has the person's words, the state and width, the box they marked, the element under it, and a picture with their box drawn on it.
-2. Call atlas_task_update with status in-progress when you start a task, so the person sees it.
-3. Change the code. Then capture the task's state with atlas_capture, and look at the picture.
-4. Call atlas_task_update with status ready-for-review and a note on what you changed. Atlas attaches your capture as the after picture.
-5. The person approves the task or sends it back with a note. A sent-back task appears again in atlas_tasks: read the last note in its history and fix what it says.
+2. If a request could mean more than one thing (one row or every row, this screen or all screens), ask the person in your session before you change anything. Do not guess.
+3. Call atlas_task_update with status in-progress when you start a task, so the person sees it.
+4. Change the code. Then capture the task's state with atlas_capture, and look at the picture.
+5. Call atlas_task_update with status ready-for-review and a note on what you changed. Atlas attaches your capture as the after picture.
+6. The person approves the task or sends it back with a note. A sent-back task appears again in atlas_tasks: read the last note in its history and fix what it says.
 
 Approved tasks are decisions: call atlas_tasks with status approved before you build from a screen the person chose.`
 } as const;

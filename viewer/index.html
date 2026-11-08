@@ -171,6 +171,13 @@ svg.links circle.on { stroke: var(--sel); }
 .side.open .ver { flex: 1 0 100%; padding: 0 10px; }
 .side.open .meta > .warn, .side.open .meta > .act { margin: 6px 0 0; }
 .side.open .ver .b { flex: 1; }
+/* Scrollbars in the viewer's panels are thin and quiet: a 6 px thumb in the hairline colour on a clear track, darker while used. */
+.slist::-webkit-scrollbar, .panel::-webkit-scrollbar, .pop::-webkit-scrollbar, .ex-body::-webkit-scrollbar { width: 10px; height: 10px; }
+.slist::-webkit-scrollbar-track, .panel::-webkit-scrollbar-track, .pop::-webkit-scrollbar-track, .ex-body::-webkit-scrollbar-track { background: transparent; }
+.slist::-webkit-scrollbar-thumb, .panel::-webkit-scrollbar-thumb, .pop::-webkit-scrollbar-thumb, .ex-body::-webkit-scrollbar-thumb { background: var(--hairline); background-clip: padding-box; border: 2px solid transparent; border-radius: 999px; }
+.slist::-webkit-scrollbar-thumb:hover, .panel::-webkit-scrollbar-thumb:hover, .pop::-webkit-scrollbar-thumb:hover, .ex-body::-webkit-scrollbar-thumb:hover { background-color: var(--connector); }
+.slist::-webkit-scrollbar-corner, .ex-body::-webkit-scrollbar-corner { background: transparent; }
+@supports not selector(::-webkit-scrollbar) { .slist, .panel, .pop, .ex-body { scrollbar-width: thin; scrollbar-color: var(--hairline) transparent; } }
 .slist { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px; border-top: .5px solid var(--hairline); }
 .slist ul { list-style: none; margin: 0; padding: 0; }
 /* A tree: each level opens and closes on its chevron; nested levels hang from a hairline under their parent's chevron. */

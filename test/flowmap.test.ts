@@ -50,7 +50,7 @@ describe("flowmap setup", () => {
     const port = Number(/localhost:(\d+)\//.exec(said)?.[1]);
     try {
       expect(said).toMatch(/Do the next steps now/);
-      expect(said).toMatch(/npx flowmap capture --base-url/);
+      expect(said).toContain(`node ${CLI} capture --base-url`);
       expect(git(project, "status", "--porcelain")).toBe("?? .flowmap/");
       const data = (await (await fetch(`http://localhost:${port}/api/flowmap`)).json()) as { project: { root: string } };
       expect(data.project.root).toBe(execFileSync("realpath", [project], { encoding: "utf8" }).trim());

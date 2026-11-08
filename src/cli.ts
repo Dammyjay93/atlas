@@ -97,14 +97,17 @@ async function startInBackground(root: string): Promise<number> {
   throw new FlowmapError(`Flowmap could not start on any port from ${DEFAULT_PORT} to ${DEFAULT_PORT + 9}. Stop a program that uses them, then run setup again.`);
 }
 
+/** How the agent ran Flowmap, so the commands it is told to run next work: "npx flowmap", or the built file before it is published. */
+const self = () => (/[\\/]_npx[\\/]/.test(process.argv[1] ?? "") ? "npx flowmap" : `node ${process.argv[1] ?? "flowmap"}`);
+
 /** What the agent does after setup, printed for the agent that ran it. */
 function nextForAgent(viewer: string, mcp: string, recipes: number): string {
   return `Flowmap is running at ${viewer} and is open in the person's browser. Do the next steps now, without asking the person:
 
 1. ${recipes ? `The project has ${recipes} recipes in .flowmap/states/. Add one for each screen that has none.` : "Find the app's screens from its routes, and write one recipe for each in .flowmap/states/<id>.json."} Start with the screens a person sees most. Leave out screens that need sign-in unless the project has a way to make a test session.
 2. Start the app's development server if it is not running.
-3. Capture every screen: npx flowmap capture --base-url <the app's address>. Each screen appears in the person's browser as it is captured. Fix any recipe whose capture landed on the wrong page, and capture again.
-4. Connect yourself to Flowmap for later work. ${connectInfo(mcp).clients.filter((c) => c.client !== "cursor").map((c) => `${c.name}: ${c.command}.`).join(" ")} Cursor: npx flowmap connect --write cursor.
+3. Capture every screen: ${self()} capture --base-url <the app's address>. Each screen appears in the person's browser as it is captured. Fix any recipe whose capture landed on the wrong page, and capture again.
+4. Connect yourself to Flowmap for later work. ${connectInfo(mcp).clients.filter((c) => c.client !== "cursor").map((c) => `${c.name}: ${c.command}.`).join(" ")} Cursor: ${self()} connect --write cursor.
 5. Tell the person how many screens are in Flowmap, and that they can mark any of them for you to change.
 
 ${TOPICS.recipes}`;

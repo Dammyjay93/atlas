@@ -58,7 +58,7 @@ One file for each state: .flowmap/states/<id>.json. The id uses lowercase letter
 - area and page: where it sits in the product. Screens with the same page are grouped together.
 - route: the path to open, starting with /. For a page with an id in its path, such as /orders/[id], make setup create the record with a fixed id, or find one that always exists, and put that id in the route.
 - setup: a shell command that puts the app's data in the state the screen needs. Flowmap runs it in the project's folder just before it captures the state. Make it reset everything the screen depends on, not only add to it: opening a page can change data, such as a page that saves progress or a notice that is dismissed once seen, and the next capture must start from the same data. Running it twice gives the same state.
-- session: a shell command that signs in a test account and prints its session cookies, one name=value on each line, such as sid=abc123. Flowmap runs it after setup and opens the page with those cookies. Leave it out for screens a signed-out person sees.
+- session: a shell command that signs in a test account and prints its session cookies, one name=value on each line, such as sid=abc123. If the app keeps its sign-in in the browser's localStorage instead, print each item as localStorage:name=value, with the value on one line, such as localStorage:auth-token={"access_token":"..."}. Flowmap runs it after setup and opens the page with those cookies and items. Leave it out for screens a signed-out person sees.
 - steps: browser actions after the page opens, in order. Each step is one of { "click": selector }, { "fill": selector, "value": text }, { "press": key } or { "waitFor": selector }. Use steps to open a tab, menu, dialog or drawer.
 - widths: screen widths in pixels, if they differ from the project's settings.
 - fullPage: true captures the whole length of a page that scrolls.
@@ -75,6 +75,7 @@ How Flowmap runs setup and session:
 - States with the same setup command form a group. Flowmap runs the group's setup once, then each of its session commands once, then captures its states several at a time. Then it goes on to the next group.
 - Flowmap never runs two different setups at the same time. So states that need data in states that conflict, such as "still in set-up" and "set-up finished", each get their own setup command, and Flowmap captures them one after the other.
 - If capturing one state changes data that another state in its group needs, give that state its own setup command, such as the same script with another argument.
+- If a group's setup or a session command fails, Flowmap reports the states it left unprepared with the command's output, and still captures the other groups.
 - Both commands get FLOWMAP_BASE_URL, the app's address, and run in the project's folder.
 - Use only test data and test accounts on a local or test database. Never use a real person's account or production data.
 
@@ -82,7 +83,7 @@ How to write a session command:
 An app with sign-in already has code that makes a session: the function its sign-in route calls once the password or the email link checks out. Write a small script, such as .flowmap/session.ts, that:
 1. Finds or creates a test account, such as test@example.com, in the local test database.
 2. Calls the app's own session code for that account, the same function the sign-in route calls, so the session is real.
-3. Prints the session cookie as name=value, with the cookie name the app sets.
+3. Prints the session cookie as name=value, with the cookie name the app sets. If the app's sign-in code writes to localStorage instead, print what it writes as localStorage:name=value.
 Run the script with the app's own tools and environment, such as "pnpm tsx .flowmap/session.ts", and make it refuse any database but the test one. If the app's session code cannot run outside the server, sign in through the running app instead: post to its sign-in or test sign-in route at FLOWMAP_BASE_URL and print the cookie from the response. Never write a real password into a recipe.
 
 Call flowmap_states after you write or change recipes, and fix anything it reports.`,

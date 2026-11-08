@@ -110,9 +110,9 @@ A recipe tells an agent how to reach one state. Agents write a recipe when they 
 Before it captures a state, Flowmap runs the recipe's `setup`, then its `session`, as shell commands in the project's folder, with `FLOWMAP_BASE_URL` set to the app's address. Then it opens `route` with the session's cookies and runs `steps`. `fullPage` captures a long page in full. `leadsTo` draws the flow connectors between screens.
 
 - `setup` puts the app's data in the state the screen needs. It must reset everything the screen depends on, because opening a page can change data, and running it twice must give the same state.
-- `session` signs in a test account and prints its cookies, one `name=value` on each line, such as `sid=abc123`. Text after a `;` on a line, such as Set-Cookie attributes, is ignored. The usual session command is a small script that calls the app's own session code for a test account.
+- `session` signs in a test account and prints its cookies, one `name=value` on each line, such as `sid=abc123`. Text after a `;` on a line, such as Set-Cookie attributes, is ignored. An app that keeps its sign-in in the browser's localStorage gets `localStorage:name=value` lines instead, with the value on one line; Flowmap puts these items in localStorage for the app's address before the page opens. The usual session command is a small script that calls the app's own session code for a test account.
 - States with the same `setup` form a group. Flowmap runs the group's setup once, then each of its session commands once, then captures its states several at a time. It never runs two different setups at the same time, so states that need data in states that conflict get different setup commands and are captured one after the other.
-- Each command may run for 5 minutes. If one fails, the capture stops and shows the command and the end of its output.
+- Each command may run for 5 minutes. If a group's setup or a session command fails, Flowmap reports those states as not captured, with the command and the end of its output, and still captures the other groups. A run with a state that was not captured exits with code 1.
 
 ## Compare with live
 

@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { capture, captureMany } from "./capture.js";
+import { capture, captureMany, type CaptureResult } from "./capture.js";
 import { check } from "./check.js";
 import { compareState } from "./compare.js";
 import { readTasks, STATUSES } from "./tasks.js";
@@ -258,15 +258,20 @@ async function main(argv: string[]): Promise<number> {
         // No state, or several: every one named (or every recipe) in one browser, several at a time.
         if (values.live || variant) throw new FlowmapError("--live and --variant capture one state at a time. Name the state.");
         const started = Date.now();
-        const results = await captureMany(findRoot(here), { states: ids, baseUrl: values["base-url"], cookies, ...(widths ? { widths } : {}) });
-        if (values.json) return out(JSON.stringify(results.map((r) => ({ ...r, widths: r.widths.map(({ preview, ...w }) => w) })), null, 2)), 0;
-        out(`Captured ${results.length} ${results.length === 1 ? "state" : "states"} at ${results[0]?.commit ?? ""}${withChanges(results[0]?.changes ?? [])} in ${Math.round((Date.now() - started) / 100) / 10} s`);
-        for (const r of results) {
+        const all = await captureMany(findRoot(here), { states: ids, baseUrl: values["base-url"], cookies, ...(widths ? { widths } : {}) });
+        const results = all.filter((r): r is CaptureResult => "widths" in r), failed = all.length - results.length;
+        if (values.json) return out(JSON.stringify(all.map((r) => ("widths" in r ? { ...r, widths: r.widths.map(({ preview, ...w }) => w) } : r)), null, 2)), failed ? 1 : 0;
+        out(`Captured ${results.length} of ${all.length} ${all.length === 1 ? "state" : "states"} at ${results[0]?.commit ?? ""}${withChanges(results[0]?.changes ?? [])} in ${Math.round((Date.now() - started) / 100) / 10} s`);
+        for (const r of all) {
+          if (!("widths" in r)) {
+            out(`  ${r.state}: not captured. ${r.problem.split("\n").join("\n    ")}`);
+            continue;
+          }
           const odd = r.widths.filter((w) => w.entry.landedOn || w.entry.status < 200 || w.entry.status >= 300);
           out(`  ${r.state}${odd.map((w) => `, at ${w.width}: ${w.entry.landedOn ? `landed on ${w.entry.landedOn}` : `HTTP ${w.entry.status}`}`).join("")}`);
         }
         if (results[0]?.uncommitted) out(IGNORE_HINT);
-        return 0;
+        return failed ? 1 : 0;
       }
       const result = await capture(findRoot(here), { state: id ?? "", baseUrl: values["base-url"], cookies, live: values.live, ...(variant ? { variant } : {}), ...(widths ? { widths } : {}) });
       if (values.json) return out(JSON.stringify({ ...result, widths: result.widths.map(({ preview, ...w }) => w) }, null, 2)), 0;

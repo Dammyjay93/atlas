@@ -17,6 +17,14 @@ export interface CookieInput {
   sameSite?: "Strict" | "Lax" | "None";
 }
 
+/** What a session command printed: the cookies, and the items the app keeps in the browser's localStorage, such as a token. */
+export interface Session {
+  cookies: CookieInput[];
+  localStorage: { name: string; value: string }[];
+}
+
+const NO_SESSION: Session = { cookies: [], localStorage: [] };
+
 export interface CaptureInput {
   state: string;
   /** Where the agent started the app, such as http://localhost:3000. */
@@ -113,15 +121,18 @@ export function baseOf(baseUrl: string): URL {
  * Opens one state at each width in an open browser and takes a picture at twice the pixel density, a smaller picture for the
  * agent, the visible elements and a self-contained HTML snapshot. Saving is up to the caller.
  */
-export async function shoot(browser: Browser, root: string, state: State, base: URL, cookies: CookieInput[] | undefined, widths: number[]): Promise<Shot[]> {
+export async function shoot(browser: Browser, root: string, state: State, base: URL, session: Session, widths: number[]): Promise<Shot[]> {
   const config = readConfig(root);
+  const { cookies } = session;
+  // The app's own address gets the localStorage items before the page opens, as if the person had signed in there.
+  const storageState = session.localStorage.length ? { storageState: { cookies: [], origins: [{ origin: base.origin, localStorage: session.localStorage }] } } : {};
   // Each width has its own window, so the widths are captured at the same time.
   const one = async (width: number): Promise<Shot> => {
-      const context = await browser.newContext({ viewport: { width, height: heightFor(width) }, deviceScaleFactor: 2, reducedMotion: "reduce" });
+      const context = await browser.newContext({ viewport: { width, height: heightFor(width) }, deviceScaleFactor: 2, reducedMotion: "reduce", ...storageState });
       try {
         // Set by host and path, not by URL: Playwright marks a cookie set by URL as secure only on https, which rejects
         // secure and __Host- session cookies on http://localhost, where browsers do allow them.
-        if (cookies?.length) {
+        if (cookies.length) {
           await context.addCookies(cookies.map((c) => ({ ...c, domain: base.hostname, path: c.path ?? "/", secure: c.secure ?? (base.protocol === "https:" || c.name.startsWith("__Host-") || c.name.startsWith("__Secure-")) })));
         }
         const page = await context.newPage();
@@ -204,17 +215,25 @@ function runCommand(root: string, command: string, what: string, base: URL): Pro
 }
 
 /**
- * The cookies a session command printed: one name=value on each line, such as sid=abc123. Blank lines are skipped. A line may
- * end with cookie attributes after a semicolon, as in a Set-Cookie header; Flowmap ignores them.
+ * What a session command printed, one item on each line:
+ * - name=value is a cookie, such as sid=abc123. Cookie attributes after a semicolon, as in a Set-Cookie header, are ignored.
+ * - localStorage:name=value is an item the app keeps in the browser's localStorage, such as a sign-in token. The value runs to
+ *   the end of the line, so it can be JSON on one line.
+ * Blank lines are skipped.
  */
-export function parseSession(output: string, command: string): CookieInput[] {
-  const cookies = output.split("\n").map((line) => line.trim()).filter(Boolean).map((line) => {
-    const pair = (line.split(";")[0] ?? "").trim(), at = pair.indexOf("=");
-    if (at < 1) throw new FlowmapError(`The session command must print one cookie on each line as name=value, but printed "${line.slice(0, 80)}": ${command}`);
-    return { name: pair.slice(0, at).trim(), value: pair.slice(at + 1).trim() };
-  });
-  if (!cookies.length) throw new FlowmapError(`The session command printed no cookies. It must print one cookie on each line as name=value: ${command}`);
-  return cookies;
+export function parseSession(output: string, command: string): Session {
+  const session: Session = { cookies: [], localStorage: [] };
+  const format = "one cookie on each line as name=value, or a localStorage item as localStorage:name=value";
+  for (const line of output.split("\n").map((l) => l.trim()).filter(Boolean)) {
+    const stored = line.startsWith("localStorage:");
+    const pair = stored ? line.slice("localStorage:".length) : (line.split(";")[0] ?? "").trim(), at = pair.indexOf("=");
+    if (at < 1) throw new FlowmapError(`The session command must print ${format}, but printed "${line.slice(0, 80)}": ${command}`);
+    const item = { name: pair.slice(0, at).trim(), value: pair.slice(at + 1).trim() };
+    if (stored) session.localStorage.push(item);
+    else session.cookies.push(item);
+  }
+  if (!session.cookies.length && !session.localStorage.length) throw new FlowmapError(`The session command printed nothing. It must print ${format}: ${command}`);
+  return session;
 }
 
 /** Runs captures one call at a time, so two different setups never change the app's data at the same time. */
@@ -228,21 +247,41 @@ export function oneAtATime<T>(run: () => Promise<T>): Promise<T> {
 /**
  * Prepares states and captures them, one setup at a time: states with the same setup form a group, the group's setup runs once
  * just before its states, then each session command runs once, and the group's states are captured several at a time with
- * the cookies their session printed. Results keep the states' order.
+ * what their session printed. When a group's setup or a session command fails, `failed` gives the result for each state it
+ * left unprepared, and the other groups go on. Results keep the states' order.
  */
-export async function bySetup<R>(root: string, states: State[], base: URL, run: (state: State, cookies: CookieInput[]) => Promise<R>): Promise<R[]> {
+export async function bySetup<R>(root: string, states: State[], base: URL, run: (state: State, session: Session) => Promise<R>, failed: (state: State, problem: string) => R): Promise<R[]> {
   const groups = new Map<string, State[]>();
   for (const state of states) groups.set(state.setup ?? "", [...(groups.get(state.setup ?? "") ?? []), state]);
   const results = new Map<string, R>();
   const names = (group: State[]) => group.map((s) => `"${s.id}"`).join(", ");
-  for (const [setup, group] of groups) {
-    if (setup) await runCommand(root, setup, `setup of ${names(group)}`, base);
-    const sessions = new Map<string, CookieInput[]>();
-    for (const command of new Set(group.flatMap((s) => (s.session ? [s.session] : [])))) {
-      const users = group.filter((s) => s.session === command);
-      sessions.set(command, parseSession(await runCommand(root, command, `session command of ${names(users)}`, base), command));
+  /** The command's output, or its failure as a FlowmapError, which leaves the group's states unprepared. */
+  const attempt = async (command: string, what: string): Promise<string | FlowmapError> => {
+    try {
+      return await runCommand(root, command, what, base);
+    } catch (error) {
+      if (error instanceof FlowmapError) return error;
+      throw error;
     }
-    const done = await inParallel(group, AT_ONCE, (state) => run(state, (state.session && sessions.get(state.session)) || []));
+  };
+  for (const [setup, group] of groups) {
+    const setupFailed = setup ? await attempt(setup, `setup of ${names(group)}`) : "";
+    const sessions = new Map<string, Session | FlowmapError>();
+    if (!(setupFailed instanceof FlowmapError)) {
+      for (const command of new Set(group.flatMap((s) => (s.session ? [s.session] : [])))) {
+        const output = await attempt(command, `session command of ${names(group.filter((s) => s.session === command))}`);
+        try {
+          sessions.set(command, output instanceof FlowmapError ? output : parseSession(output, command));
+        } catch (error) {
+          if (!(error instanceof FlowmapError)) throw error;
+          sessions.set(command, error);
+        }
+      }
+    }
+    const done = await inParallel(group, AT_ONCE, async (state) => {
+      const session = setupFailed instanceof FlowmapError ? setupFailed : state.session ? sessions.get(state.session) ?? NO_SESSION : NO_SESSION;
+      return session instanceof FlowmapError ? failed(state, session.message) : run(state, session);
+    });
     group.forEach((state, at) => results.set(state.id, done[at] as R));
   }
   return states.map((state) => results.get(state.id) as R);
@@ -261,7 +300,9 @@ export function capture(root: string, input: CaptureInput): Promise<CaptureResul
     const base = baseOf(input.baseUrl);
     const browser = await launch();
     try {
-      const [result] = await bySetup(root, [state], base, (s, cookies) => captureState(root, input, s, cookies, browser));
+      const [result] = await bySetup(root, [state], base, (s, session) => captureState(root, input, s, session, browser), (_, problem) => {
+        throw new FlowmapError(problem);
+      });
       return result as CaptureResult;
     } finally {
       await browser.close();
@@ -269,8 +310,8 @@ export function capture(root: string, input: CaptureInput): Promise<CaptureResul
   });
 }
 
-/** Captures a state that is already prepared, in an open browser, with its session's cookies, and files it. */
-async function captureState(root: string, input: CaptureInput, state: State, session: CookieInput[], browser: Browser): Promise<CaptureResult> {
+/** Captures a state that is already prepared, in an open browser, with what its session printed, and files it. */
+async function captureState(root: string, input: CaptureInput, state: State, session: Session, browser: Browser): Promise<CaptureResult> {
   const config = readConfig(root);
   const commit = input.live ? resolveRef(root, config.liveRef) : resolveRef(root, "HEAD");
   if (!commit) {
@@ -282,7 +323,7 @@ async function captureState(root: string, input: CaptureInput, state: State, ses
   const uncommitted = changes.length > 0;
   // A version is captured from its own address; the rest of the recipe (steps, widths) applies as it is.
   const shown = input.variant?.route ? { ...state, route: input.variant.route } : state;
-  const shots = await shoot(browser, root, shown, base, [...(input.cookies ?? []), ...session], input.widths ?? state.widths ?? config.widths);
+  const shots = await shoot(browser, root, shown, base, { ...session, cookies: [...(input.cookies ?? []), ...session.cookies] }, input.widths ?? state.widths ?? config.widths);
   const variant = input.variant;
   const results = shots.map((s): WidthResult => {
     if (variant) {
@@ -300,8 +341,17 @@ async function captureState(root: string, input: CaptureInput, state: State, ses
   return { state: state.id, commit, branch: at.branch, uncommitted, changes, widths: results };
 }
 
-/** Captures several states, or every state, in one browser: one setup at a time, and the states of each setup several at a time. */
-export function captureMany(root: string, input: Omit<CaptureInput, "state" | "variant" | "live"> & { states?: string[] }): Promise<CaptureResult[]> {
+/** A state that could not be captured in a run of several, and why. */
+export interface FailedCapture {
+  state: string;
+  problem: string;
+}
+
+/**
+ * Captures several states, or every state, in one browser: one setup at a time, and the states of each setup several at a time.
+ * A state that fails, or whose setup or session fails, is reported with its problem, and the others are still captured.
+ */
+export function captureMany(root: string, input: Omit<CaptureInput, "state" | "variant" | "live"> & { states?: string[] }): Promise<(CaptureResult | FailedCapture)[]> {
   return oneAtATime(async () => {
     const all = readStates(root).states;
     const ids = input.states?.length ? input.states : all.map((s) => s.id);
@@ -311,7 +361,20 @@ export function captureMany(root: string, input: Omit<CaptureInput, "state" | "v
     const base = baseOf(input.baseUrl);
     const browser = await launch();
     try {
-      return await bySetup(root, all.filter((s) => ids.includes(s.id)), base, (state, cookies) => captureState(root, { ...input, state: state.id }, state, cookies, browser));
+      return await bySetup<CaptureResult | FailedCapture>(
+        root,
+        all.filter((s) => ids.includes(s.id)),
+        base,
+        async (state, session) => {
+          try {
+            return await captureState(root, { ...input, state: state.id }, state, session, browser);
+          } catch (error) {
+            if (error instanceof FlowmapError) return { state: state.id, problem: error.message };
+            throw error;
+          }
+        },
+        (state, problem) => ({ state: state.id, problem })
+      );
     } finally {
       await browser.close();
     }

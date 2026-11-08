@@ -12,7 +12,7 @@ const StepSchema = z.union([
 
 /**
  * How to reach one state of the product. Agents write a recipe when they build a screen and repair it when it stops working.
- * Flowmap runs `setup`, then `session`, whose printed name=value lines are the cookies; then it opens `route` and runs `steps`.
+ * Flowmap runs `setup`, then `session`, which prints name=value cookies and localStorage:name=value items; then it opens `route` and runs `steps`.
  */
 export const StateSchema = z.strictObject({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "use lowercase letters, digits and hyphens"),

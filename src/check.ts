@@ -97,7 +97,7 @@ async function checkNow(root: string, input: CheckInput): Promise<CheckResult> {
       const sizes = state.widths ?? config.widths;
       let shots;
       try {
-        shots = await shoot(browser, root, state, base, [...(input.cookies ?? []), ...session], sizes);
+        shots = await shoot(browser, root, state, base, { ...session, cookies: [...(input.cookies ?? []), ...session.cookies] }, sizes);
       } catch (error) {
         for (const width of sizes) widths.push({ state: state.id, name: state.name, width, status: "failed", areas: [], problem: error instanceof Error ? error.message : String(error) });
         return widths;
@@ -126,7 +126,7 @@ async function checkNow(root: string, input: CheckInput): Promise<CheckResult> {
         widths.push({ state: state.id, name: state.name, width: s.width, status: result.status === "missing" ? "failed" : result.status, areas: result.areas, ...(was ? { before: was } : {}), now });
       }
       return widths;
-    });
+    }, (state, problem) => (state.widths ?? config.widths).map((width): CheckedWidth => ({ state: state.id, name: state.name, width, status: "failed", areas: [], problem })));
     widths = perState.flat();
   } finally {
     await browser.close();

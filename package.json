@@ -1,13 +1,26 @@
 {
-  "name": "flowmap",
-  "version": "0.0.0",
-  "private": true,
+  "name": "useflowmap",
+  "version": "0.1.0",
   "description": "See every screen of your web app as the code renders it, compare it with live, and send changes back to your coding agents.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Dammyjay93/flowmap.git"
+  },
+  "homepage": "https://github.com/Dammyjay93/flowmap#readme",
+  "bugs": {
+    "url": "https://github.com/Dammyjay93/flowmap/issues"
+  },
   "type": "module",
   "bin": {
-    "flowmap": "dist/cli.js"
+    "flowmap": "dist/cli.js",
+    "useflowmap": "dist/cli.js"
   },
+  "files": [
+    "dist/*.js",
+    "viewer/index.html",
+    "viewer/icons.json"
+  ],
   "engines": {
     "node": ">=22"
   },
@@ -15,7 +28,8 @@
     "build": "tsc -p tsconfig.json",
     "test": "pnpm build && vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "icons": "node scripts/icons.mjs"
+    "icons": "node scripts/icons.mjs",
+    "prepublishOnly": "pnpm test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",

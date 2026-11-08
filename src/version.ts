@@ -1,3 +1,6 @@
 import { readFileSync } from "node:fs";
 
-export const VERSION: string = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { name: string; version: string };
+export const VERSION = pkg.version;
+/** The npm package's name, which npx takes. Its command is "flowmap". */
+export const PACKAGE = pkg.name;

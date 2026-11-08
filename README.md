@@ -17,20 +17,9 @@ Flowmap is for people who build by prompting coding agents. Agents build many sc
 
 Flowmap needs Node 22 or later and git. Open your coding agent (Claude Code, Codex or Cursor) in your project and paste:
 
-> Set up Flowmap: run `npx flowmap setup` and do what it prints.
+> Set up Flowmap: run `npx useflowmap setup` and do what it prints.
 
 Your agent sets Flowmap up, starts it in the background and opens it in your browser. Then it writes a recipe for each screen, starts your app and captures every screen, and you watch them appear. You never open a terminal.
-
-Flowmap is not on npm yet. Until it is, build it once and give your agent the built file instead of `npx flowmap`:
-
-```sh
-git clone https://github.com/Dammyjay93/flowmap.git
-cd flowmap
-pnpm install
-pnpm build
-```
-
-> Set up Flowmap: run `node /path/to/flowmap/dist/cli.js setup` and do what it prints.
 
 Set-up writes:
 
@@ -39,7 +28,7 @@ Set-up writes:
 - `.flowmap/tasks/`: one file for each task;
 - `.flowmap/.gitignore`, which keeps `.flowmap/store/`, where captures are kept, out of git. Set-up changes none of your own files.
 
-To start Flowmap yourself instead, run `npx flowmap` in your project's root folder.
+To start Flowmap yourself instead, run `npx useflowmap` in your project's root folder.
 
 ### Connect your coding agent
 
@@ -58,6 +47,8 @@ Then ask your agent: "Set up Flowmap for this app." You don't need to add anythi
 For clients that start MCP servers themselves, `flowmap mcp` serves the same tools over stdio.
 
 ## Commands
+
+The npm package is `useflowmap`. Run a command with `npx useflowmap <command>`, or install the package and run `flowmap <command>`.
 
 | Command | What it does |
 | --- | --- |

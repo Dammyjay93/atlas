@@ -16,7 +16,7 @@ import { overview } from "./overview.js";
 import { FlowmapError, findRoot, readConfig } from "./project.js";
 import { DEFAULT_PORT, serve } from "./serve.js";
 import { TOPICS } from "./guide.js";
-import { VERSION } from "./version.js";
+import { PACKAGE, VERSION } from "./version.js";
 
 const HELP = `flowmap ${VERSION}
 See every screen of your web app as the code renders it.
@@ -102,8 +102,15 @@ async function startInBackground(root: string): Promise<number> {
   throw new FlowmapError(`Flowmap could not start on any port from ${DEFAULT_PORT} to ${DEFAULT_PORT + 9}. Stop a program that uses them, then run setup again.`);
 }
 
-/** How the agent ran Flowmap, so the commands it is told to run next work: "npx flowmap", or the built file before it is published. */
-const self = () => (/[\\/]_npx[\\/]/.test(process.argv[1] ?? "") ? "npx flowmap" : `node ${process.argv[1] ?? "flowmap"}`);
+/**
+ * How the agent ran Flowmap, so the commands it is told to run next work: "npx <package>" from npx or the project's own install,
+ * "flowmap" from a global install, or the built file of a copy of the repository.
+ */
+const self = () => {
+  const ran = process.argv[1] ?? "";
+  if (/[\\/](_npx|node_modules)[\\/]/.test(ran)) return `npx ${PACKAGE}`;
+  return /[\\/]flowmap$/.test(ran) ? "flowmap" : `node ${ran || "dist/cli.js"}`;
+};
 
 /** What the agent does after setup, printed for the agent that ran it. */
 function nextForAgent(viewer: string, mcp: string, recipes: number): string {
@@ -170,7 +177,7 @@ async function main(argv: string[]): Promise<number> {
       out(`Flowmap for ${readConfig(root).name} is running at ${running.viewer}`);
       out(`Connect your coding agent with one command:`);
       for (const c of connectInfo(running.url).clients.filter((x) => x.client !== "cursor")) out(`  ${c.name}: ${c.command}`);
-      out(`  Cursor: flowmap connect --write cursor`);
+      out(`  Cursor: ${self()} connect --write cursor`);
       out(`Then ask your agent to set up Flowmap for this app. Press Ctrl+C to stop.`);
       if (!values["no-open"]) openInBrowser(running.viewer);
       return 0;
@@ -220,7 +227,7 @@ async function main(argv: string[]): Promise<number> {
       for (const c of info.clients) {
         out(`${c.name}${c.installed ? "" : " (not found on this computer)"}`);
         out(`  ${c.client === "cursor" ? "Open this link" : "Run"}: ${c.command}`);
-        out(`  Or let Flowmap add itself: flowmap connect --write ${c.client}\n`);
+        out(`  Or let Flowmap add itself: ${self()} connect --write ${c.client}\n`);
       }
       out(`Any other MCP client: add this to its settings.`);
       out(JSON.stringify(info.other, null, 2));

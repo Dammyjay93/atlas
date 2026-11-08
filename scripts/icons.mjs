@@ -5,7 +5,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 
-const SOLAR = ["monitor-linear", "smartphone-linear", "square-share-line-linear", "check-linear", "copy-linear", "danger-triangle-linear", "plug-circle-linear", "routing-2-linear", "sidebar-minimalistic-linear", "chat-round-line-linear", "panel-left-linear", "file-linear", "routing-linear", "alt-arrow-right-linear", "git-branch-linear", "sun-2-linear", "moon-linear"];
+const SOLAR = ["monitor-linear", "smartphone-linear", "square-share-line-linear", "check-linear", "copy-linear", "danger-triangle-linear", "plug-circle-linear", "routing-2-linear", "sidebar-minimalistic-linear", "chat-round-line-linear", "panel-left-linear", "file-linear", "routing-linear", "alt-arrow-right-linear", "git-branch-linear", "sun-2-linear", "moon-linear", "folder-linear", "document-text-linear", "frame-linear"];
 /** Viewer name: Simple Icons name. */
 const LOGOS = { "logo-claude": "claude", "logo-codex": "openai", "logo-cursor": "cursor", "logo-other": "modelcontextprotocol" };
 const require = createRequire(import.meta.url);

@@ -59,6 +59,33 @@ svg { display: block; }
 .fname .row { display: flex; align-items: center; gap: 12px; height: 20px; }
 .fname .who { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1; overflow: hidden; }
 .fname .n { overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; max-width: 100%; }
+/* A page's name is in full ink; a state's is lighter, so it reads as part of the page above it. */
+.fname .k { flex: none; align-self: center; display: grid; color: var(--ink-3); }
+.fname .k svg { width: 14px; height: 14px; }
+.fname.page .n { color: var(--ink); }
+/* The state switch in a page's name row: the viewer's segmented control, made compact to fit the row. */
+.fname .sw { pointer-events: auto; padding: 1px; gap: 1px; align-self: center; flex-shrink: 1; min-width: 0; overflow: hidden; }
+.fname .sw button { height: 22px; padding: 0 8px; font-size: .8125rem; line-height: 1; white-space: nowrap; }
+/* A row with a switch centres everything on one line, and its name keeps the switch's size when selected. */
+.fname .who:has(.sw) { align-items: center; }
+.fname.sel .who:has(.sw) .n { font-size: .8125rem; }
+.fname .swm { display: none; position: relative; pointer-events: auto; align-self: center; flex-shrink: 1; min-width: 0; }
+.fname.tight .sw { display: none; }
+.fname.tight .swm { display: inline-flex; }
+/* The compact switch is the same control: the grey track holding one white pill, sized to the state it shows. It opens a menu. */
+.fname .swm { background: var(--hover); border-radius: 9px; padding: 1px; }
+.fname .swm button { display: inline-flex; align-items: center; gap: 4px; height: 22px; max-width: 100%; min-width: 0; padding: 0 6px 0 8px; border: 0; border-radius: 7px; background: var(--ground); box-shadow: 0 1px 2px rgba(0, 0, 0, .1); color: var(--ink); font: 500 .8125rem/1 var(--sans); }
+.fname .swm button span { overflow: hidden; text-overflow: ellipsis; }
+.fname .swm svg { flex: none; width: 12px; height: 12px; rotate: 90deg; color: var(--ink-3); }
+/* The menu of a page's states. */
+.smenu { position: fixed; z-index: 30; min-width: 180px; max-width: 320px; padding: 4px; border-radius: 12px; background: var(--ground); border: .5px solid var(--hairline); }
+.smenu button { display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: var(--ink); font: .8125rem var(--sans); text-align: start; white-space: nowrap; }
+.smenu button span { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.smenu button svg { flex: none; width: 14px; height: 14px; color: var(--ink); visibility: hidden; }
+.smenu button[aria-checked="true"] svg { visibility: visible; }
+.smenu button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+@media (hover: hover) { .smenu button:hover { background: var(--hover); } }
+.frame img.fade { position: absolute; inset: 0; width: 100%; height: auto; pointer-events: none; }
 .fname .r { display: none; font-family: var(--mono); font-size: .75rem; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .fname.peek .r { display: inline; }
 .fname.sel { color: var(--ink); }
@@ -359,7 +386,7 @@ function put(tag, cls, x, y, w, h, html) {
   return e;
 }
 /* A screen at its real size, with its name kept above it at one size. */
-function screen(s, x, y) {
+function screen(s, x, y, kind = s.steps?.length ? "state" : "page", unit = null) {
   const shot = shotOf(s.id), fw = width, fh = heightOf(s.id);
   const f = put("button", "frame" + (shot ? "" : " absent"), x, y, fw, fh,
     shot ? `<img src="${esc(shot.png)}" alt="" decoding="async">${areasOf(shot)}` : `<span class="t">Not captured yet</span><span class="w">Ask your coding agent to capture <code>${esc(s.id)}</code>.</span>`);
@@ -368,7 +395,7 @@ function screen(s, x, y) {
   f.setAttribute("aria-label", `${s.name}${shot ? "" : ", not captured yet"}${vs === "changed" ? ", changed from live" : vs === "new" ? ", no live capture" : ""}${shot?.landedOn ? `, landed on ${shot.landedOn}` : ""}`);
   if (selected === s.id) f.classList.add("sel");
   const n = document.createElement("div");
-  n.className = "fname" + (selected === s.id ? " sel" : "");
+  n.className = `fname ${kind}` + (selected === s.id ? " sel" : "");
   n.dataset.id = s.id;
   const warn = shot?.landedOn ? `<span class="warn" title="The app opened ${esc(shot.landedOn)} instead of ${esc(s.route)}">${icon("danger-triangle-linear")}<span class="w">Landed on ${esc(shot.landedOn)}</span></span>` : "";
   const versus = vs === "changed"
@@ -376,7 +403,14 @@ function screen(s, x, y) {
     : vs === "new" ? `<span class="tag">No live capture</span>` : "";
   const own = openTasks(s.id), review = own.filter((t) => t.status === "ready-for-review").length;
   const taskChip = review ? `<span class="st ready-for-review">${review === 1 ? "Ready for review" : `${review} ready for review`}</span>` : own.length ? `<span class="tag">${own.length} ${own.length === 1 ? "task" : "tasks"}</span>` : "";
-  n.innerHTML = `<div class="row"><span class="who"><span class="n">${esc(s.name)}</span><span class="r">${esc(s.route)}</span></span>${taskChip}${versus}${warn}</div>`;
+  // A page with states names the page and switches between its states with the same segmented control as Pages and Flows.
+  const name = unit ? unit.page.name : s.name;
+  // When the labels do not fit the frame's width on screen, the same choice shows as a dropdown.
+  const choices = unit ? [unit.page, ...unit.states].map((st) => ({ id: st.id, label: st === unit.page ? "Default" : st.name })) : [];
+  const sw = unit?.states.length
+    ? `<span class="seg sw">${choices.map((c) => `<button type="button" tabindex="-1" data-show="${esc(c.id)}" data-page="${esc(unit.page.id)}" aria-pressed="${c.id === s.id}">${esc(c.label)}</button>`).join("")}</span><span class="swm"><button type="button" tabindex="-1" data-menu="${esc(unit.page.id)}" aria-haspopup="menu" aria-expanded="false"><span>${esc(choices.find((c) => c.id === s.id)?.label ?? "Default")}</span>${icon("alt-arrow-right-linear")}</button></span>`
+    : "";
+  n.innerHTML = `<div class="row"><span class="who"><span class="k" aria-hidden="true">${icon(kind === "state" ? "frame-linear" : "document-text-linear")}</span><span class="n">${esc(name)}</span>${sw}<span class="r">${esc(s.route)}</span></span>${taskChip}${versus}${warn}</div>`;
   names.appendChild(n);
   labels.push({ n, x, y, w: fw, h: fh });
   return fh;
@@ -565,6 +599,17 @@ function flows() {
 }
 
 /* Flows: each tree left to right, one row for each end screen; a screen sits on the row of its first next screen. */
+/* A page is one frame on the canvas. Its states (recipes with steps, such as an open dialog or a selected tab) are views of that
+   frame, picked with a segmented control in its name row. `shown` keeps the state each page shows; `homeOf` maps a state to its page. */
+const shown = new Map();
+let homeOf = new Map();
+/* The frame for one page, showing the state picked for it, sized to the tallest of its states so switching never moves anything. */
+function pageFrame(page, states, x, y) {
+  for (const st of [page, ...states]) homeOf.set(st.id, page.id);
+  const cur = states.find((st) => st.id === shown.get(page.id)) ?? page;
+  screen(cur, x, y, "page", { page, states });
+  return Math.max(heightOf(page.id), ...states.map((st) => heightOf(st.id)));
+}
 function drawFlows() {
   const FW = width, DH = width >= 768 ? 900 : 844, COL = FW + 720, GAPY = 240, BETWEEN = 1500;
   let top = 0, maxX = 0;
@@ -580,28 +625,40 @@ function drawFlows() {
       top = bottom + BETWEEN;
       continue;
     }
-    let rows = 0; const rowH = [];
-    const place = (node, depth) => {
-      node.depth = depth;
-      if (!node.next) node.row = rows++;
-      else { node.next.forEach(([, child]) => place(child, depth + 1)); node.row = node.next[0][1].row; }
-      rowH[node.row] = Math.max(rowH[node.row] || 0, heightOf(node.s.id));
+    // A page and its states make one unit; the pages a unit leads to, from the page or any of its states, sit in the next column.
+    const unitOf = (node) => {
+      const states = [], nav = [];
+      const collect = (n) => (n.next ?? []).forEach(([text, child]) => {
+        if (child.s.steps?.length) { states.push(child.s); collect(child); }
+        else nav.push([text, child]);
+      });
+      collect(node);
+      const h = Math.max(heightOf(node.s.id), ...states.map((st) => heightOf(st.id)));
+      return { s: node.s, states, h, next: nav.map(([text, child]) => [text, unitOf(child)]) };
     };
-    fl.trees.forEach((t) => place(t, 0));
+    const units = fl.trees.map(unitOf);
+    let rows = 0; const rowH = [];
+    const place = (u, depth) => {
+      u.depth = depth;
+      if (!u.next.length) u.row = rows++;
+      else { u.next.forEach(([, child]) => place(child, depth + 1)); u.row = u.next[0][1].row; }
+      rowH[u.row] = Math.max(rowH[u.row] || 0, u.h);
+    };
+    units.forEach((u) => place(u, 0));
     const rowY = []; rowH.reduce((y, h, i) => { rowY[i] = y; return y + h + GAPY; }, top);
     let bottom = top;
-    const draw = (node) => {
-      const x = node.depth * COL, y = rowY[node.row];
-      bottom = Math.max(bottom, y + screen(node.s, x, y));
+    const idOf = (u) => shown.get(u.s.id) && u.states.some((st) => st.id === shown.get(u.s.id)) ? shown.get(u.s.id) : u.s.id;
+    const draw = (u) => {
+      const x = u.depth * COL, y = rowY[u.row];
+      bottom = Math.max(bottom, y + pageFrame(u.s, u.states, x, y));
       maxX = Math.max(maxX, x + FW);
-      if (!node.next) return;
-      // Each link runs from the middle of this screen's right edge to the middle of the next screen's left edge.
-      for (const [text, child] of node.next) {
-        link(node.s.id, child.s.id, text, x + FW, y + DH / 2, child.depth * COL, rowY[child.row] + DH / 2);
+      // Each link runs from the middle of this page's right edge to the middle of the next page's left edge.
+      for (const [text, child] of u.next) {
+        link(idOf(u), idOf(child), text, x + FW, y + heightOf(idOf(u)) / 2, child.depth * COL, rowY[child.row] + heightOf(idOf(child)) / 2);
         draw(child);
       }
     };
-    fl.trees.forEach(draw);
+    units.forEach(draw);
     counted("");
     rects[fl.id] = { x: 0, y: top, h: DH };
     if (!firstBox) firstBox = { y: top, h: DH };
@@ -620,13 +677,41 @@ function pages() {
   }
   return [...out.values()].sort((a, b) => a.area.localeCompare(b.area) || a.title.localeCompare(b.title));
 }
+/* A group's pages, each with its states: a page is a recipe without steps; a state belongs to the page at its route, or else to the
+   group's first page. */
+function pagesOf(group) {
+  const bases = group.states.filter((x) => !x.steps?.length);
+  const here = (bases.length ? bases : group.states.slice(0, 1)).map((page) => ({ page, states: [] }));
+  for (const st of group.states) {
+    if (here.some((u) => u.page.id === st.id)) continue;
+    (here.find((u) => u.page.route.split("?")[0] === st.route.split("?")[0]) ?? here[0]).states.push(st);
+  }
+  return here;
+}
+/* A flow's pages in the order it visits them, each with its states: the same units the canvas draws. */
+function flowPages(trees) {
+  const out = [];
+  const visit = (node) => {
+    const states = [], next = [];
+    const collect = (n) => (n.next ?? []).forEach(([, child]) => { if (child.s.steps?.length) { states.push(child.s); collect(child); } else next.push(child); });
+    collect(node);
+    out.push({ page: node.s, states });
+    next.forEach(visit);
+  };
+  trees.forEach(visit);
+  return out;
+}
 function drawPages() {
   const GAP = width >= 768 ? 160 : 120, BETWEEN = 1500;
   let top = 0, maxX = 0;
   for (const group of pages()) {
     const counted = heading(top, group.title);
     let rowH = 0;
-    group.states.forEach((s, i) => { rowH = Math.max(rowH, screen(s, i * (width + GAP), top)); maxX = Math.max(maxX, i * (width + GAP) + width); });
+    pagesOf(group).forEach((u, i) => {
+      const x = i * (width + GAP);
+      rowH = Math.max(rowH, pageFrame(u.page, u.states, x, top));
+      maxX = Math.max(maxX, x + width);
+    });
     counted(group.area);
     rects[group.key] = { x: 0, y: top, h: Math.min(rowH, width >= 768 ? 900 : 844) };
     if (!firstBox) firstBox = { y: top, h: width >= 768 ? 900 : 844 };
@@ -636,7 +721,8 @@ function drawPages() {
 }
 
 function render(keepView) {
-  world.innerHTML = ""; names.innerHTML = ""; under.innerHTML = ""; labels = []; sections = []; edges = []; rects = {}; firstBox = null;
+  closeStateMenu();
+  world.innerHTML = ""; names.innerHTML = ""; under.innerHTML = ""; labels = []; sections = []; edges = []; rects = {}; firstBox = null; homeOf = new Map();
   const main = mode === "flows" ? drawFlows() : drawPages();
   const size = drawVersions(main);
   world.style.width = size.w + "px"; world.style.height = size.h + "px";
@@ -704,6 +790,7 @@ function room() {
   return { left: Math.max(side, phoneView() ? 16 : 48), top, w: vp.clientWidth, h: vp.clientHeight - top - bot };
 }
 function apply(anim) {
+  if (stateMenu) closeStateMenu();
   world.classList.toggle("anim", !!anim);
   world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.s})`;
   world.style.setProperty("--inv", String(1 / view.s));
@@ -726,6 +813,8 @@ function placeNames(anim) {
       n.hidden = sw < 72 || !k.named;
       if (n.hidden) continue;
       n.style.left = view.x + x * s + "px"; n.style.top = view.y + y * s - 28 + "px"; n.style.width = sw + "px";
+      const seg = n.querySelector(".sw");
+      if (seg) { n.classList.remove("tight"); n.classList.toggle("tight", seg.scrollWidth > seg.clientWidth + 1); }
     }
     let marks = names.querySelector(".selmarks");
     if (!marks) {
@@ -933,28 +1022,32 @@ function setSide(open, remember = true) {
 $("sideBtn").addEventListener("click", () => { setSide(!sideOpen); if (data) apply(); });
 function fillSide() {
   const focusKey = document.activeElement?.closest?.(".slist [data-key]")?.dataset.key, focusPart = document.activeElement?.classList.contains("chev") ? ".chev" : ".go";
-  const screenIcon = icon(width >= 768 ? "monitor-linear" : "smartphone-linear");
+  // One icon for each level: a group (a flow, or the screens in none) is a folder, a page is notes, and a state of a page,
+  // reached by steps such as opening a dialog or a tab, is a frame.
+  const kindIcon = (s) => icon(s.steps?.length ? "frame-linear" : "document-text-linear");
   const chev = (key, name) => `<button class="chev" type="button" aria-expanded="${!shut.has(key)}" aria-label="${shut.has(key) ? "Open" : "Close"} ${esc(name)}">${icon("alt-arrow-right-linear")}</button>`;
   const screen = (s, children = "") => {
     const shot = shotOf(s.id), changed = shot?.compare?.status === "changed";
     const own = openTasks(s.id), review = own.some((t) => t.status === "ready-for-review");
     const label = [s.name, shot ? "" : "not captured yet", changed ? "changed from live" : "", review ? "a task to review" : own.length ? `${own.length} ${own.length === 1 ? "task" : "tasks"}` : ""].filter(Boolean).join(", ");
     const key = `s:${s.id}`;
-    return `<li><div class="tr${s.id === selected ? " on" : ""}" data-id="${esc(s.id)}" data-key="${esc(key)}">${children ? chev(key, s.name) : `<span class="gap"></span>`}<button class="go" type="button" aria-current="${s.id === selected}" aria-label="${esc(label)}">${screenIcon}<span class="nm">${esc(s.name)}</span>${changed ? `<span class="chg-dot" title="Changed from live"></span>` : ""}${review ? `<span class="st ready-for-review">Review</span>` : own.length ? `<span class="n">${own.length}</span>` : ""}</button></div>${children && !shut.has(key) ? `<ul>${children}</ul>` : ""}</li>`;
+    return `<li><div class="tr${s.id === selected ? " on" : ""}" data-id="${esc(s.id)}" data-key="${esc(key)}">${children ? chev(key, s.name) : `<span class="gap"></span>`}<button class="go" type="button" aria-current="${s.id === selected}" aria-label="${esc(label)}">${kindIcon(s)}<span class="nm">${esc(s.name)}</span>${changed ? `<span class="chg-dot" title="Changed from live"></span>` : ""}${review ? `<span class="st ready-for-review">Review</span>` : own.length ? `<span class="n">${own.length}</span>` : ""}</button></div>${children && !shut.has(key) ? `<ul>${children}</ul>` : ""}</li>`;
   };
   const node = (cls, key, name, glyph, count, children, go = "") =>
     `<li><div class="tr ${cls}" data-key="${esc(key)}">${chev(key, name)}<button class="go" type="button"${go}>${glyph}<span class="nm">${esc(name)}</span>${count == null ? "" : `<span class="count">${count}</span>`}</button></div>${shut.has(key) ? "" : `<ul>${children}</ul>`}</li>`;
   let body = "", count = 0;
+  // At most three levels, as on the canvas: a group, its pages, and each page's states.
+  const pageRows = (units) => units.map((u) => screen(u.page, u.states.map((st) => screen(st)).join(""))).join("");
   if (mode === "flows") {
-    const step = (t) => screen(t.s, (t.next ?? []).map(([, child]) => step(child)).join(""));
     const fl = flows();
-    count = new Set(fl.flatMap((f) => { const ids = []; const walk = (t) => { ids.push(t.s.id); (t.next ?? []).forEach(([, c]) => walk(c)); }; f.trees.forEach(walk); return ids; })).size;
-    body = fl.map((f) => node("page", `f:${f.id}`, f.name, f.other ? "" : icon("routing-linear"), null, f.trees.map(step).join(""), ` data-rect="${esc(f.id)}"`)).join("");
+    count = data.states.length;
+    body = fl.map((f) => node("page", `f:${f.id}`, f.name, icon("folder-linear"), null, pageRows(flowPages(f.trees)), ` data-rect="${esc(f.id)}"`)).join("");
   } else {
     const groups = pages();
     count = data.states.length;
     const areas = [...new Set(groups.map((g) => g.area))];
-    const pageNode = (g) => node("page", `p:${g.key}`, g.title, icon("file-linear"), null, g.states.map((s) => screen(s)).join(""), ` data-rect="${esc(g.key)}"`);
+    // A group that holds one page is that page: no folder around it.
+    const pageNode = (g) => { const units = pagesOf(g); return units.length === 1 ? pageRows(units) : node("page", `p:${g.key}`, g.title, icon("folder-linear"), null, pageRows(units), ` data-rect="${esc(g.key)}"`); };
     body = areas.length > 1 || areas[0]
       ? areas.map((a) => node("grp", `a:${a}`, a || "Other", "", null, groups.filter((g) => g.area === a).map(pageNode).join(""))).join("")
       : groups.map(pageNode).join("");
@@ -971,11 +1064,53 @@ $("slist").addEventListener("click", (e) => {
   }
   const rectKey = e.target.closest("[data-rect]")?.dataset.rect;
   if (rectKey) { if (rects[rectKey]) goRect(rects[rectKey]); return; }
+  // A state not on show is a view of its page's frame: show it there first.
+  if (!at(row.dataset.id) && homeOf.has(row.dataset.id)) showState(homeOf.get(row.dataset.id), row.dataset.id);
   const l = at(row.dataset.id); if (!l) return;
   goRect({ x: l.x, y: l.y, h: l.h });
   select(row.dataset.id);
-  if (innerWidth < 1024) setSide(false, false);
 });
+
+/* Shows another state on a page's frame, crossfading from the picture it showed. A selected frame stays selected. */
+function showState(page, id) {
+  const was = document.querySelector(`.sw [data-page="${CSS.escape(page)}"][aria-pressed="true"]`)?.dataset.show ?? page;
+  if (was === id) return;
+  const old = document.querySelector(`.frame[data-id="${CSS.escape(was)}"] img`)?.getAttribute("src");
+  shown.set(page, id);
+  if (selected === was) selected = id;
+  render(true);
+  const f = document.querySelector(`.frame[data-id="${CSS.escape(id)}"]`);
+  if (!old || !f || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const img = document.createElement("img"); img.className = "fade"; img.alt = ""; img.src = old; f.appendChild(img);
+  img.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: "cubic-bezier(.2, 0, 0, 1)" }).finished.then(() => img.remove());
+}
+names.addEventListener("pointerdown", (e) => { if (e.target.closest(".sw, .swm")) e.stopPropagation(); });
+names.addEventListener("click", (e) => {
+  const opener = e.target.closest("[data-menu]");
+  if (opener) { e.stopPropagation(); openStateMenu(opener); return; }
+  const b = e.target.closest("[data-show]"); if (!b) return;
+  e.stopPropagation(); showState(b.dataset.page, b.dataset.show);
+});
+/* The compact switch's menu: the page's states, the shown one checked. Choosing one shows it; Escape or a click elsewhere closes it. */
+let stateMenu = null;
+function closeStateMenu() { stateMenu?.el.remove(); stateMenu?.opener.setAttribute("aria-expanded", "false"); stateMenu = null; }
+function openStateMenu(opener) {
+  const page = opener.dataset.menu, again = stateMenu?.page === page;
+  closeStateMenu(); if (again) return;
+  const choices = [...opener.closest(".fname").querySelectorAll(".sw [data-show]")];
+  const el = document.createElement("div"); el.className = "smenu"; el.setAttribute("role", "menu");
+  el.innerHTML = choices.map((c) => `<button type="button" role="menuitemradio" aria-checked="${c.getAttribute("aria-pressed")}" data-pick="${esc(c.dataset.show)}"><span>${esc(c.textContent)}</span>${icon("check-linear")}</button>`).join("");
+  document.body.appendChild(el);
+  const r = opener.getBoundingClientRect();
+  el.style.left = Math.max(8, Math.min(r.left, innerWidth - el.offsetWidth - 8)) + "px";
+  el.style.top = Math.min(r.bottom + 6, innerHeight - el.offsetHeight - 8) + "px";
+  opener.setAttribute("aria-expanded", "true");
+  stateMenu = { el, page, opener };
+  el.addEventListener("click", (e) => { const b = e.target.closest("[data-pick]"); if (!b) return; closeStateMenu(); showState(page, b.dataset.pick); });
+  el.querySelector('[aria-checked="true"]')?.focus();
+}
+document.addEventListener("pointerdown", (e) => { if (stateMenu && !stateMenu.el.contains(e.target) && !e.target.closest("[data-menu]")) closeStateMenu(); }, true);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && stateMenu) { e.stopPropagation(); closeStateMenu(); } }, true);
 
 /* The top bar: which commit the screens show, and how far the code has moved since. */
 function fillFreshness() {

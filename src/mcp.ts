@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { capture } from "./capture.js";
 import { compareState, cropPicture, type StateComparison } from "./compare.js";
+import { beforeOf, readTasks, STATUSES, updateTask, type Task } from "./tasks.js";
 import { INSTRUCTIONS, TOPICS, type Topic } from "./guide.js";
 import { overview } from "./overview.js";
 import { AtlasError } from "./project.js";
@@ -15,6 +16,27 @@ const MAX_AREA_PICTURES = 3;
 /** Space around each changed area in its pictures, and the tallest picture, in CSS pixels. */
 const CROP_MARGIN = 24;
 const CROP_MAX_HEIGHT = 480;
+
+/** Most tasks returned with a picture in one call. */
+const MAX_TASK_PICTURES = 5;
+/** Space around a marked box in its picture, in CSS pixels. */
+const MARK_MARGIN = 64;
+/** The statuses an agent works on, listed when atlas_tasks gets no status. */
+const TO_DO = ["open", "sent-back", "in-progress"];
+
+/** A task as an agent reads it: what to change, where, and what has happened. */
+const forAgent = (t: Task) => ({
+  id: t.id,
+  state: t.state,
+  width: t.width,
+  status: t.status,
+  request: t.words,
+  ...(t.area ? { area: t.area } : { area: "the whole screen" }),
+  ...(t.element ? { element: t.element } : {}),
+  markedAt: t.commit,
+  ...(t.after ? { after: t.after } : {}),
+  history: t.log
+});
 
 /** How an agent captures live, when nothing is captured there yet. */
 const captureLiveFirst = (c: StateComparison) =>
@@ -34,6 +56,7 @@ function versusLive(root: string, state: string): StateComparison | null {
 export interface Activity {
   tool: string;
   state?: string;
+  task?: string;
   phase: "start" | "done" | "failed";
 }
 
@@ -45,7 +68,7 @@ export function createServer(root: string, onActivity: (activity: Activity) => v
     {
       title: "How to use Atlas",
       description: "Explains how Atlas works and how to write state recipes. Call it once before your first Atlas task in a session.",
-      inputSchema: { topic: z.enum(Object.keys(TOPICS) as [Topic, ...Topic[]]).optional().describe("workflow (default), recipes, capture or compare") },
+      inputSchema: { topic: z.enum(Object.keys(TOPICS) as [Topic, ...Topic[]]).optional().describe("workflow (default), recipes, capture, compare or tasks") },
       annotations: { readOnlyHint: true }
     },
     async ({ topic }) => text(TOPICS[topic ?? "workflow"])
@@ -151,6 +174,62 @@ export function createServer(root: string, onActivity: (activity: Activity) => v
           content: [{ type: "text" as const, text: JSON.stringify(summary, null, 2) + (order.length ? `\n\nPictures, in order:\n${order.join("\n")}` : "") }, ...pictures]
         };
       } catch (error) {
+        if (error instanceof AtlasError) return { isError: true, ...text(error.message) };
+        throw error;
+      }
+    }
+  );
+  server.registerTool(
+    "atlas_tasks",
+    {
+      title: "List tasks",
+      description:
+        "List the changes the person asked for. Each task has the person's words, the state and width, the box they marked and the element under it, and its history, with a picture of the marked area. Without a status, it lists the tasks to work on: open, sent back and in progress. Approved tasks are ready to build: ask for status approved before building from a design the person chose.",
+      inputSchema: { status: z.enum(STATUSES).optional().describe("Only tasks with this status") },
+      annotations: { readOnlyHint: true }
+    },
+    async ({ status }) => {
+      const { tasks, invalid } = readTasks(root);
+      const chosen = tasks.filter((t) => (status ? t.status === status : TO_DO.includes(t.status)));
+      const pictures: { type: "image"; data: string; mimeType: string }[] = [];
+      const order: string[] = [];
+      for (const t of chosen.slice(0, MAX_TASK_PICTURES)) {
+        const before = beforeOf(root, t);
+        if (!before) continue;
+        const box = t.area
+          ? { x: t.area.x - MARK_MARGIN, y: t.area.y - MARK_MARGIN, w: t.area.w + 2 * MARK_MARGIN, h: Math.min(CROP_MAX_HEIGHT, t.area.h + 2 * MARK_MARGIN) }
+          : { x: 0, y: 0, w: t.width, h: t.width >= 768 ? 900 : 844 };
+        pictures.push({ type: "image", data: cropPicture(root, before, t.width, box, t.area).toString("base64"), mimeType: "image/png" });
+        order.push(`${t.id}: the screen as the person marked it${t.area ? ", with their box drawn in indigo" : ""}`);
+      }
+      const summary = {
+        tasks: chosen.map(forAgent),
+        ...(invalid.length ? { invalid } : {}),
+        ...(chosen.length ? { next: "Set a task to in-progress with atlas_task_update when you start it. After your change, capture its state, then set it to ready-for-review with a note on what you changed." } : {})
+      };
+      return { content: [{ type: "text" as const, text: JSON.stringify(summary, null, 2) + (order.length ? `\n\nPictures, in order:\n${order.join("\n")}` : "") }, ...pictures] };
+    }
+  );
+  server.registerTool(
+    "atlas_task_update",
+    {
+      title: "Update a task",
+      description:
+        "Move a task: in-progress when you start it, ready-for-review when you have changed the code and captured its state again. Atlas attaches that capture for the person to check, so capture first. Add a note that says what you changed. The person approves the task or sends it back with a note.",
+      inputSchema: {
+        id: z.string().describe("The task id, from atlas_tasks"),
+        status: z.enum(["in-progress", "ready-for-review"]),
+        note: z.string().optional().describe("What you changed, in a sentence or two")
+      }
+    },
+    async ({ id, status, note }) => {
+      onActivity({ tool: "atlas_task_update", task: id, phase: "start" });
+      try {
+        const task = updateTask(root, id, "agent", status, note);
+        onActivity({ tool: "atlas_task_update", task: id, phase: "done" });
+        return text(JSON.stringify(forAgent(task), null, 2));
+      } catch (error) {
+        onActivity({ tool: "atlas_task_update", task: id, phase: "failed" });
         if (error instanceof AtlasError) return { isError: true, ...text(error.message) };
         throw error;
       }

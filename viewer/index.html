@@ -12,7 +12,7 @@
    with its name above it. Controls float over the canvas. Frame names and control text keep one size at every zoom; screens and connectors zoom. */
 :root {
   --ground: #ffffff; --canvas: #f5f5f5; --ink: #1c1c1e; --ink-2: #4a4a51; --ink-3: #6b6b72;
-  --line: #e6e6e3; --hover: #f1f1ef; --connector: #a3a3aa; --edge: rgba(20, 20, 24, .1); --hairline: rgba(20, 20, 24, .14); --section: rgba(255, 255, 255, .6);
+  --line: #e6e6e3; --hover: #f1f1ef; --connector: #a3a3aa; --edge: rgba(20, 20, 24, .1); --hairline: rgba(20, 20, 24, .14);
   --term: #18181b; --term-ink: #f4f4f5; --fresh: #4c9a4c; --warn-bg: #fbf1e1; --warn-ink: #8a5208; --absent: #bdbdb8;
   --sel: #4f46e5; --focus: #4f46e5; --sel-grad: conic-gradient(from 200deg in oklch, #4f46e5, #0ea5e9 30%, #8b5cf6 62%, #4f46e5);
   --ease: cubic-bezier(.2, 0, 0, 1);
@@ -21,7 +21,7 @@
 }
 @media (prefers-color-scheme: dark) { :root {
   --ground: #1c1c1e; --canvas: #121213; --ink: #f2f2f3; --ink-2: #b4b4bb; --ink-3: #939399;
-  --line: #2c2c30; --hover: #28282b; --connector: #6b6b72; --edge: rgba(255, 255, 255, .1); --hairline: rgba(255, 255, 255, .14); --section: rgba(255, 255, 255, .025);
+  --line: #2c2c30; --hover: #28282b; --connector: #6b6b72; --edge: rgba(255, 255, 255, .1); --hairline: rgba(255, 255, 255, .14);
   --term: #0c0c0e; --term-ink: #f4f4f5; --fresh: #6fbf6f; --warn-bg: rgba(224, 160, 64, .14); --warn-ink: #f0b863; --absent: #4a4a4f; --focus: #a5b4fc; color-scheme: dark } }
 html, body { height: 100%; margin: 0; }
 body { background: var(--canvas); color: var(--ink); font-family: var(--sans); font-size: .875rem; line-height: 1.45; overflow: hidden; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
@@ -29,7 +29,7 @@ button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.float :focus-visible, .menu :focus-visible, .panel :focus-visible { outline-offset: -2px; }
+.float :focus-visible, .panel :focus-visible { outline-offset: -2px; }
 .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 svg { display: block; }
 
@@ -37,6 +37,7 @@ svg { display: block; }
 .viewport { position: fixed; inset: 0; overflow: hidden; background: var(--canvas); touch-action: none; cursor: grab; }
 .viewport.panning { cursor: grabbing; }
 .world { position: absolute; left: 0; top: 0; transform-origin: 0 0; --inv: 1; }
+/* Screens sit straight on the canvas with a hairline, kept one screen size at every zoom. */
 .frame { position: absolute; padding: 0; border: 0; background: var(--ground); box-shadow: 0 0 0 calc(1px * var(--inv)) var(--edge); overflow: hidden; }
 .frame img { display: block; width: 100%; height: auto; pointer-events: none; user-select: none; }
 .frame.absent { background: transparent; box-shadow: none; outline: calc(1px * var(--inv)) dashed var(--absent); outline-offset: calc(-1px * var(--inv)); display: grid; place-content: center; gap: 16px; text-align: center; padding: 64px; }
@@ -46,10 +47,6 @@ svg { display: block; }
 .frame:focus-visible { outline: calc(2px * var(--inv)) solid var(--focus); outline-offset: calc(6px * var(--inv)); }
 .frame.sel { outline: none; }
 .far .frame.absent { opacity: .45; }
-svg.wires { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
-svg.wires path { fill: none; stroke: var(--connector); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-svg.wires .head, svg.wires circle { fill: var(--connector); stroke: none; }
-
 /* Names, section headers and connector labels: screen text placed over the canvas, one size at every zoom. */
 .names, .under { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .fname { position: absolute; container-type: inline-size; height: 20px; font-size: .8125rem; line-height: 1.2; white-space: nowrap; color: var(--ink-2); }
@@ -64,9 +61,13 @@ svg.wires .head, svg.wires circle { fill: var(--connector); stroke: none; }
 @container (max-width: 200px) { .warn .w { display: none; } }
 .warn { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 999px; background: var(--warn-bg); color: var(--warn-ink); font-size: .75rem; font-weight: 500; flex: none; }
 .warn svg { width: 12px; height: 12px; }
-/* Compared with live: a label in the name row, and each changed area outlined with a thin dash at one screen size. */
+/* Compared with live: a label in the name row, and each changed area outlined with a thin dash at one screen size, in compare view. */
 .tag { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border: .5px solid var(--hairline); border-radius: 999px; color: var(--ink-3); font-size: .75rem; flex: none; }
 @container (max-width: 200px) { .tag { display: none; } }
+/* Annotations belong to their modes: change outlines to compare, pins to comment mode. The canvas otherwise shows the screens as they are. */
+.frame .chg { display: none; }
+.pin { display: none !important; }
+.commenting .pin { display: grid !important; }
 .chg { position: absolute; outline: calc(1px * var(--inv)) dashed var(--warn-ink); outline-offset: calc(3px * var(--inv)); border-radius: calc(6px * var(--inv)); background: color-mix(in srgb, var(--warn-bg) 35%, transparent); pointer-events: none; }
 /* Compare: over the selected screen, live drawn over this branch up to the handle. Drag the handle, or use the arrow keys on it. */
 .cmp { position: absolute; z-index: 1; overflow: hidden; background: var(--ground); box-shadow: 0 0 0 calc(1px * var(--inv)) var(--edge); }
@@ -80,12 +81,22 @@ svg.wires .head, svg.wires circle { fill: var(--connector); stroke: none; }
 .cmp .lab { position: absolute; top: calc(12px * var(--inv)); padding: calc(3px * var(--inv)) calc(10px * var(--inv)); border-radius: 999px; background: var(--ink); color: var(--ground); font-size: calc(12px * var(--inv)); font-weight: 500; line-height: 1.3; white-space: nowrap; pointer-events: none; }
 .cmp .lab.l { left: calc(12px * var(--inv)); }
 .cmp .lab.r { right: calc(12px * var(--inv)); background: var(--warn-ink); }
-.surf { position: absolute; background: var(--section); border: .5px solid var(--hairline); border-radius: 16px; }
 .sect { position: absolute; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; white-space: nowrap; }
 .sect .t { margin: 0; font-weight: 600; line-height: 1.2; letter-spacing: -.012em; color: var(--ink); }
 .sect .chips { display: flex; gap: 4px; }
 .chip { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border: .5px solid var(--hairline); border-radius: 999px; background: var(--ground); font-size: .75rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.edge { position: absolute; font-size: .75rem; line-height: 16px; color: var(--ink-3); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Links between screens: smooth curves that fade in from the source, a hollow port, a fine chevron. The selected or hovered
+   screen's links turn indigo, so its flow reads at a glance. */
+svg.links { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+svg.links path { fill: none; stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; }
+svg.links .hd { stroke: var(--connector); }
+svg.links .hd.on { stroke: var(--sel); }
+svg.links circle { fill: var(--canvas); stroke: var(--connector); stroke-width: 1; }
+svg.links circle.on { stroke: var(--sel); }
+/* A link's label: a tag on the final run into its screen, as wide as that run allows, wrapping when it must. */
+.edge.on { color: var(--sel); }
+/* The label sits on its line: centred on the level run into the target, the line breaking around it. It shows in full or not at all. */
+.edge { position: absolute; translate: -50% -50%; width: max-content; font-size: .6875rem; font-weight: 500; line-height: 14px; letter-spacing: .01em; color: var(--ink-3); white-space: nowrap; }
 
 /* Selected screen: a gradient ring, square handles and its size, as in a design tool. */
 .selglow { position: absolute; box-shadow: 0 0 0 3px color-mix(in srgb, var(--sel) 12%, transparent), 0 0 28px color-mix(in srgb, var(--sel) 16%, transparent); }
@@ -98,28 +109,57 @@ svg.wires .head, svg.wires circle { fill: var(--connector); stroke: none; }
 .sep { width: 1px; align-self: stretch; margin: 4px; background: var(--line); flex-shrink: 0; }
 /* All three bars are 32px of controls inside 4px padding, so their heights match. */
 .top-left, .top-right { height: 32px; }
-.top-left { top: calc(16px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); padding-left: 12px; max-width: calc(100% - 260px); }
-.brand { margin: 0; font-weight: 600; font-size: .875rem; line-height: 1.2; white-space: nowrap; }
-.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--fresh); flex-shrink: 0; margin-left: 6px; }
-.dot.stale { background: var(--warn-ink); }
-.ver { padding: 0 6px; font-size: .8125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.ver code { font-family: var(--mono); font-size: .75rem; color: var(--ink-2); }
-.top-left .warn { margin-right: 4px; }
+/* One outer margin, 8 px, for every bar and the panel. */
+.top-left { top: calc(8px + env(safe-area-inset-top, 0px)); left: max(8px, env(safe-area-inset-left, 0px)); max-width: calc(100% - 260px); }
+/* The screens panel's header, built like every bar: 4 px padding and controls 32 px tall with an 8 px radius (the bar's 12 less
+   its padding), so every corner nests. Closed, it is one row: the panel button, the breadcrumb Atlas / project, then the branch.
+   Open, the breadcrumb and the button make the first row, and the branch a full-width second row, like a branch picker. */
+.shead { display: flex; align-items: center; gap: 4px; min-width: 0; height: 32px; }
+.crumb { display: flex; align-items: baseline; gap: 6px; min-width: 0; padding: 0 6px 0 4px; }
+.word { flex: none; font-size: .875rem; font-weight: 700; letter-spacing: -.04em; user-select: none; }
+.slash { flex: none; color: var(--ink-3); opacity: .6; font-size: .875rem; user-select: none; }
+.brand { margin: 0; font-size: .875rem; font-weight: 500; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.shead .meta { display: flex; align-items: center; gap: 4px; min-width: 0; }
+/* The branch: a field outlined by a hairline, lighter than the breadcrumb above it, so the project leads and the branch follows. */
+.ver { display: flex; align-items: center; gap: 10px; height: 32px; box-sizing: border-box; padding: 0 10px; border-radius: 8px; box-shadow: inset 0 0 0 .5px var(--hairline); color: var(--ink-2); font-size: .8125rem; white-space: nowrap; min-width: 0; }
+.ver svg { flex: none; width: 14px; height: 14px; margin-right: -4px; color: var(--ink-3); }
+.ver .b { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ver code { flex: none; font-family: var(--mono); font-size: .75rem; color: var(--ink-3); }
+.top-left .warn { margin: 0 4px; }
+.stoggle svg { width: 16px; height: 16px; }
+.side.open { z-index: 22; flex-direction: column; align-items: stretch; height: auto; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); width: 248px; max-width: calc(100% - 16px); box-sizing: border-box; padding: 0; border-radius: 12px; }
+.side.open .shead { flex-wrap: wrap; height: auto; padding: 4px; }
+/* Text in the open header starts 12 px from the panel's edge: 4 px of padding and 8 px inside each control. */
+.side.open .crumb { flex: 1; padding-left: 8px; }
+.side.open .stoggle { order: 2; }
+/* The branch field is inset 12 px, the same as the text above it: its left edge lines up with "Atlas". */
+.side.open .meta { order: 3; flex-basis: 100%; flex-wrap: wrap; margin: 0 8px 4px; }
+.side.open .ver { flex: 1; padding: 0 10px; }
+.side.open .ver .b { flex: 1; }
+.slist { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px; border-top: .5px solid var(--hairline); }
+.slist ul { list-style: none; margin: 0; padding: 0; }
+/* A tree: each level opens and closes on its chevron; nested levels hang from a hairline under their parent's chevron. */
+.slist ul ul { margin-left: 13px; padding-left: 6px; border-left: .5px solid var(--hairline); }
+.tr { display: flex; align-items: center; height: 28px; border-radius: 8px; color: var(--ink); }
+.tr .chev, .tr .gap { flex: none; display: grid; place-items: center; width: 20px; height: 28px; padding: 0; border: 0; background: none; color: var(--ink-3); border-radius: 6px; }
+.tr .chev svg { width: 12px; height: 12px; }
+.tr .chev[aria-expanded="true"] svg { rotate: 90deg; }
+.tr .go { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px 0 2px; border: 0; background: none; color: inherit; font: .8125rem var(--sans); text-align: start; border-radius: 6px; }
+.tr .go > svg { flex: none; width: 16px; height: 16px; color: var(--ink-3); }
+.tr .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tr.sec .go { font-size: .75rem; font-weight: 600; color: var(--ink-2); }
+.tr.grp .go { font-size: .75rem; font-weight: 500; color: var(--ink-3); }
+.tr .count { font-weight: 400; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.tr.on { background: var(--hover); }
+.tr.on .go { font-weight: 500; }
+.tr.on .go > svg { color: var(--ink); }
+.tr .chg-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--warn-ink); flex: none; }
+.tr .n { min-width: 16px; text-align: end; color: var(--ink-3); font-size: .75rem; font-variant-numeric: tabular-nums; flex: none; }
+.tr .st { height: 18px; padding: 0 6px; font-size: .6875rem; }
 .act { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; font-size: .8125rem; color: var(--ink-2); white-space: nowrap; }
 .act i { width: 7px; height: 7px; border-radius: 50%; background: var(--sel); }
-.top-right { top: calc(16px + env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); }
-.bottom { bottom: calc(16px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); max-width: calc(100% - 32px); }
-.select { position: relative; flex-shrink: 0; min-width: 0; }
-.select select { display: none; }
-.selbtn { display: inline-flex; align-items: center; gap: 6px; height: 32px; max-width: 100%; padding: 0 8px 0 10px; border: 0; border-radius: 8px; background: transparent; font-size: .8125rem; color: var(--ink); white-space: nowrap; }
-.selbtn span { overflow: hidden; text-overflow: ellipsis; }
-.selbtn svg { width: 12px; height: 12px; flex: none; color: var(--ink-3); }
-.selbtn[aria-expanded="true"] { background: var(--hover); }
-.menu { position: absolute; z-index: 30; left: 0; bottom: calc(100% + 8px); min-width: max(100%, 200px); max-height: 60vh; overflow-y: auto; padding: 4px; background: var(--ground); border: .5px solid var(--hairline); border-radius: 12px; outline: none; }
-.opt { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px 0 8px; border-radius: 8px; font-size: .8125rem; color: var(--ink); white-space: nowrap; cursor: pointer; }
-.opt svg { width: 14px; height: 14px; flex: none; color: var(--sel); visibility: hidden; }
-.opt[aria-selected="true"] svg { visibility: visible; }
-.opt.active { background: var(--hover); }
+.top-right { top: calc(8px + env(safe-area-inset-top, 0px)); right: max(8px, env(safe-area-inset-right, 0px)); }
+.bottom { bottom: calc(8px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); max-width: calc(100% - 16px); }
 .seg { display: inline-flex; background: var(--hover); border-radius: 9px; padding: 2px; gap: 2px; flex-shrink: 0; }
 .seg button { display: inline-grid; place-items: center; border: 0; background: transparent; height: 28px; padding: 0 12px; border-radius: 7px; color: var(--ink-2); font-size: .8125rem; }
 .seg button[aria-pressed="true"] { background: var(--ground); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .1); font-weight: 500; }
@@ -132,7 +172,7 @@ svg.wires .head, svg.wires circle { fill: var(--connector); stroke: none; }
 
 /* Connect panel: one row for each coding agent, each with one action. A connected agent shows that in its row.
    Until the agent has written recipes, the footer holds the sentence to ask it. */
-.panel { position: fixed; z-index: 20; top: calc(64px + env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); width: min(320px, calc(100% - 32px)); max-height: calc(100% - 96px); overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box; background: var(--ground); border: .5px solid var(--hairline); border-radius: 14px; }
+.panel { position: fixed; z-index: 20; top: calc(56px + env(safe-area-inset-top, 0px)); right: max(8px, env(safe-area-inset-right, 0px)); width: min(320px, calc(100% - 32px)); max-height: calc(100% - 96px); overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box; background: var(--ground); border: .5px solid var(--hairline); border-radius: 14px; }
 .panel h2 { margin: 0; padding: 14px 16px 12px; font-size: .8125rem; font-weight: 600; border-bottom: .5px solid var(--hairline); }
 .clients { margin: 0; padding: 0; list-style: none; }
 .clients li { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 0 12px 0 16px; }
@@ -157,27 +197,67 @@ svg.wires .head, svg.wires circle { fill: var(--connector); stroke: none; }
 .tbtn:focus-visible { outline: 2px solid var(--ground); outline-offset: -2px; }
 .tbtn[aria-pressed="true"] { background: color-mix(in srgb, var(--ground) 18%, transparent); }
 
+/* Comment mode: with Comment on, the element under the pointer is outlined; click it, or drag a box, and the note opens there.
+   Tasks show as numbered pins on their screen; a pin opens its thread in place. Marks are indigo, apart from the dashed amber of changes from live. */
+.commenting .frame:not(.absent) { cursor: crosshair; }
+.hover-el, .tmark { position: absolute; border-radius: calc(4px * var(--inv)); pointer-events: none; }
+.hover-el { outline: calc(1px * var(--inv)) solid var(--sel); outline-offset: calc(2px * var(--inv)); }
+.tmark { outline: calc(1.5px * var(--inv)) solid var(--sel); outline-offset: calc(2px * var(--inv)); background: color-mix(in srgb, var(--sel) 6%, transparent); }
+.pin { position: absolute; z-index: 2; display: grid; place-items: center; width: calc(24px * var(--inv)); height: calc(24px * var(--inv)); margin: calc(-12px * var(--inv)) 0 0 calc(-12px * var(--inv)); padding: 0; border: calc(2px * var(--inv)) solid var(--ground); border-radius: 999px 999px 999px 0; background: var(--sel); color: #fff; font: 600 calc(11px * var(--inv)) / 1 var(--sans); font-variant-numeric: tabular-nums; box-shadow: 0 calc(1px * var(--inv)) calc(4px * var(--inv)) rgba(0, 0, 0, .18); cursor: pointer; }
+.pin.sent-back { background: var(--warn-ink); }
+.pin.ready-for-review { background: var(--ground); color: var(--sel); border-color: var(--sel); }
+.pin[aria-expanded="true"] { box-shadow: 0 0 0 calc(3px * var(--inv)) color-mix(in srgb, var(--sel) 25%, transparent); }
+.pop { position: fixed; z-index: 25; width: min(300px, calc(100% - 24px)); box-sizing: border-box; max-height: min(520px, calc(100% - 24px)); overflow-y: auto; overscroll-behavior: contain; background: var(--ground); border: .5px solid var(--hairline); border-radius: 12px; box-shadow: 0 8px 28px -8px rgba(0, 0, 0, .22); }
+.pop form, .pop .thread { padding: 12px; }
+.pop .on { margin: 0 0 8px; font-size: .75rem; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pop .on b { font-weight: 500; color: var(--ink-2); }
+.pop textarea { display: block; width: 100%; box-sizing: border-box; min-height: 64px; resize: vertical; padding: 8px 10px; border: .5px solid var(--hairline); border-radius: 8px; background: var(--ground); color: var(--ink); font: .8125rem/1.45 var(--sans); }
+.pop textarea::placeholder { color: var(--ink-3); }
+.pop .row { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.pop .btn { height: 30px; padding: 0 12px; font-size: .8125rem; }
+.pop .rowbtn { height: 30px; }
+.pop .err { margin: 8px 0 0; font-size: .75rem; color: var(--warn-ink); }
+.tmeta { display: flex; align-items: center; gap: 8px; font-size: .75rem; color: var(--ink-3); }
+.tmeta .copyp { margin-left: auto; }
+.st { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; background: var(--hover); color: var(--ink-2); font-size: .75rem; font-weight: 500; white-space: nowrap; flex: none; }
+.st.ready-for-review { background: color-mix(in srgb, var(--sel) 12%, transparent); color: var(--sel); }
+.st.sent-back { background: var(--warn-bg); color: var(--warn-ink); }
+.st.approved { background: color-mix(in srgb, var(--fresh) 14%, transparent); color: var(--fresh); }
+.thread .w { margin: 8px 0 0; font-size: .8125rem; line-height: 1.45; text-wrap: pretty; white-space: pre-wrap; overflow-wrap: anywhere; }
+.thread .note { margin: 6px 0 0; font-size: .75rem; line-height: 1.45; color: var(--ink-2); overflow-wrap: anywhere; }
+.crops { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+.crop { position: relative; overflow: hidden; border-radius: 6px; box-shadow: 0 0 0 .5px var(--hairline); background: var(--ground); }
+.crop img { position: absolute; max-width: none; }
+.crop span { position: absolute; left: 4px; top: 4px; padding: 0 6px; border-radius: 999px; background: var(--ink); color: var(--ground); font-size: .6875rem; line-height: 16px; }
+.copyp { border: 0; background: none; padding: 0; color: var(--ink-3); font-size: .75rem; text-decoration: underline; text-underline-offset: 3px; }
+.bottom .zbtn[aria-pressed="true"] { background: var(--ink); color: var(--ground); }
+.bottom .zbtn { display: inline-flex; gap: 6px; padding: 0 10px; }
 .empty { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; }
 .empty .t { font-weight: 600; font-size: 1rem; line-height: 1.3; margin: 0 0 6px; }
 .empty .s { color: var(--ink-2); margin: 0 auto 16px; max-width: 380px; text-wrap: pretty; }
 .btn { height: 34px; padding: 0 14px; border-radius: 8px; border: 0; background: var(--ink); color: var(--ground); font-weight: 500; }
 
 @media (hover: hover) {
-  .zbtn:not(.primary):hover, .selbtn:hover { background: var(--hover); color: var(--ink); }
+  .zbtn:not(.primary):hover { background: var(--hover); color: var(--ink); }
   .zbtn.primary:hover { background: color-mix(in srgb, var(--hover), var(--ink) 7%); }
   .rowbtn:hover { background: var(--hover); }
+  .copyp:hover { color: var(--ink); }
+  .tr:not(.on):hover { background: color-mix(in srgb, var(--hover) 70%, transparent); }
+  .tr .chev:hover { color: var(--ink); }
   .copy:hover { background: var(--hover); color: var(--ink); }
   .tbtn:hover { background: color-mix(in srgb, var(--ground) 14%, transparent); }
   .seg button:not([aria-pressed="true"]):hover { color: var(--ink); }
 }
-@media (max-width: 640px) {
-  .top-left .brand, .top-left .sep { display: none; }
-  .top-left { padding-left: 4px; right: calc(max(16px, env(safe-area-inset-right, 0px)) + 104px); max-width: none; }
-  .bottom { left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); transform: none; max-width: none; flex-wrap: wrap; row-gap: 4px; }
-  .bottom .sep { display: none; }
-  .bottom .widths + .sep { display: block; flex-basis: 100%; height: 0; margin: 0; background: none; }
-  .bottom .select { flex: 1 1 0; } .bottom .selbtn { width: 100%; justify-content: space-between; }
+@media (prefers-reduced-motion: no-preference) {
+  .tr .chev svg { transition: rotate .15s var(--ease); }
 }
+@media (max-width: 640px) {
+  .pop textarea { font-size: 16px; }
+  .top-left:not(.open) .word, .top-left:not(.open) .slash { display: none; }
+  .top-left:not(.open) { right: calc(max(8px, env(safe-area-inset-right, 0px)) + 104px); max-width: none; }
+}
+/* With the panel open on a wide screen, the bottom bar centres on the canvas beside it. */
+@media (min-width: 1024px) { body.side-open .bottom { left: calc(50% + 128px); } }
 @media (prefers-reduced-motion: no-preference) {
   .world.anim { transition: transform .35s var(--ease); }
   .act i { animation: pulse 1.2s ease-in-out infinite; }
@@ -193,19 +273,20 @@ svg.wires .head, svg.wires circle { fill: var(--connector); stroke: none; }
 </main>
 <div class="empty" id="empty" hidden><div><p class="t" id="emptyTitle"></p><p class="s" id="emptyText"></p><button class="btn" id="emptyConnect" type="button">Connect your agent</button></div></div>
 
-<header class="float top-left">
-  <h1 class="brand" id="brand">Atlas</h1>
-  <span class="sep"></span>
-  <span class="dot" id="vdot"></span>
-  <span class="ver" id="ver"></span>
-  <span class="warn" id="fresh" hidden></span>
-  <span class="act" id="act" role="status" hidden></span>
-</header>
+<aside class="float top-left side" id="side" aria-labelledby="brand">
+  <div class="shead">
+    <button class="zbtn stoggle" id="sideBtn" type="button" aria-expanded="false" aria-controls="slist" aria-label="Show the screens list"></button>
+    <span class="crumb"><span class="word">Atlas</span><span class="slash" aria-hidden="true">/</span><h1 class="brand" id="brand">Atlas</h1></span>
+    <span class="meta"><span class="ver" id="ver"></span><span class="warn" id="fresh" hidden></span><span class="act" id="act" role="status" hidden></span></span>
+  </div>
+  <nav class="slist" id="slist" aria-label="Screens" hidden></nav>
+</aside>
 
 <div class="float top-right">
   <button class="zbtn primary" id="connectBtn" type="button" aria-expanded="false" aria-controls="connect">Connect</button>
 </div>
 <section class="panel" id="connect" aria-labelledby="connectTitle" hidden></section>
+<div class="pop" id="pop" role="dialog" aria-label="Task" hidden></div>
 
 <nav class="float bottom" aria-label="View">
   <div class="seg mode" role="group" aria-label="Arrange by">
@@ -215,8 +296,7 @@ svg.wires .head, svg.wires circle { fill: var(--connector); stroke: none; }
   <span class="sep"></span>
   <div class="seg widths" role="group" aria-label="Screen width" id="widths"></div>
   <span class="sep"></span>
-  <div class="select"><select id="pickSel" aria-label="Flow"></select></div>
-  <div class="select"><select id="areaSel" aria-label="Area"></select></div>
+  <button class="zbtn" id="commentBtn" type="button" aria-pressed="false" aria-keyshortcuts="C"></button>
 </nav>
 <div class="tool" id="tool" role="toolbar" aria-label="Selected screen" hidden></div>
 
@@ -230,13 +310,12 @@ const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name
 const phoneView = () => innerWidth < 640;
 
 let data = null;
-let view = { x: 0, y: 0, s: 1 }, mode = "flows", width = 0, area = "", pick = "", selected = null;
+let view = { x: 0, y: 0, s: 1 }, mode = "flows", width = 0, selected = null;
 let rects = {}, firstBox = null, labels = [], sections = [], edges = [];
 
 const byId = () => new Map(data.states.map((s) => [s.id, s]));
 const shotOf = (id) => data.shots[id]?.[String(width)] ?? null;
 const heightOf = (id) => shotOf(id)?.height ?? (width >= 768 ? 900 : 844);
-const inArea = (s) => !area || (s.area ?? "") === area;
 
 /* ---------- Drawing ---------- */
 function put(tag, cls, x, y, w, h, html) {
@@ -264,7 +343,9 @@ function screen(s, x, y) {
   const versus = vs === "changed"
     ? `<span class="warn" title="${shot.compare.areas.length} changed ${shot.compare.areas.length === 1 ? "area" : "areas"}">${icon("routing-2-linear")}<span class="w">Changed from live</span></span>`
     : vs === "new" ? `<span class="tag">No live capture</span>` : "";
-  n.innerHTML = `<div class="row"><span class="who"><span class="n">${esc(s.name)}</span><span class="r">${esc(s.route)}</span></span>${versus}${warn}</div>`;
+  const own = openTasks(s.id), review = own.filter((t) => t.status === "ready-for-review").length;
+  const taskChip = review ? `<span class="st ready-for-review">${review === 1 ? "Ready for review" : `${review} ready for review`}</span>` : own.length ? `<span class="tag">${own.length} ${own.length === 1 ? "task" : "tasks"}</span>` : "";
+  n.innerHTML = `<div class="row"><span class="who"><span class="n">${esc(s.name)}</span><span class="r">${esc(s.route)}</span></span>${taskChip}${versus}${warn}</div>`;
   names.appendChild(n);
   labels.push({ n, x, y, w: fw, h: fh });
   return fh;
@@ -272,10 +353,11 @@ function screen(s, x, y) {
 /* What changed from live, outlined at each changed element's exact box, or at the changed pixels when no element accounts for them. */
 const areasOf = (shot) => (shot.compare?.areas ?? []).flatMap((a) => (a.changes.length ? a.changes.filter((c) => c.box).map((c) => c.box) : [a]))
   .map((b) => `<i class="chg" aria-hidden="true" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px"></i>`).join("");
+/* Tasks still to finish on a screen, at the shown width; approved tasks are done. */
+const openTasks = (id) => (data.tasks ?? []).filter((t) => t.state === id && t.width === width && t.status !== "approved");
 /* A section: an accessible heading, a surface under its screens, and a header placed with the frame names. */
 function heading(y, title) {
   put("h2", "vh", 0, y, null, null, esc(title));
-  const surf = document.createElement("div"); surf.className = "surf"; under.appendChild(surf);
   const el = document.createElement("div"); el.className = "sect";
   el.innerHTML = `<span class="t">${esc(title)}</span><span class="chips"></span>`;
   names.appendChild(el);
@@ -283,22 +365,17 @@ function heading(y, title) {
   return (prefix) => {
     const drawn = labels.slice(from), ids = drawn.map((l) => l.n.dataset.id), missing = ids.filter((id) => !shotOf(id)).length;
     el.querySelector(".chips").innerHTML = [prefix, `${ids.length} ${ids.length === 1 ? "screen" : "screens"}`, missing ? `${missing} not captured` : ""].filter(Boolean).map((c) => `<span class="chip">${esc(c)}</span>`).join("");
-    sections.push({ surf, el, y, w: Math.max(...drawn.map((l) => l.x + l.w)), bottom: Math.max(...drawn.map((l) => l.y + l.h)) });
+    sections.push({ el, y, w: Math.max(...drawn.map((l) => l.x + l.w)), bottom: Math.max(...drawn.map((l) => l.y + l.h)) });
   };
 }
-function wire(svg, d, cls) { const p = document.createElementNS(svgNS, "path"); p.setAttribute("d", d); if (cls) p.setAttribute("class", cls); svg.appendChild(p); }
-function head(svg, x, y) { wire(svg, `M${x} ${y} l-22 -12 v24 z`, "head"); }
-function junction(svg, x, y) { const c = document.createElementNS(svgNS, "circle"); c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", 8); svg.appendChild(c); }
-const measure = document.createElement("canvas").getContext("2d");
-function label(text, x1, x2, y) {
+function link(from, to, text, sx, sy, ex, ey) {
   const el = document.createElement("div"); el.className = "edge"; el.textContent = text; names.appendChild(el);
-  measure.font = `12px ${getComputedStyle(document.body).fontFamily}`;
-  edges.push({ el, x1, x2, y, need: Math.ceil(measure.measureText(text).width) + 8 });
+  edges.push({ el, from, to, sx, sy, ex, ey });
 }
 
 /* Flows come from the recipes' leadsTo links: each group of linked states is one flow, drawn as trees from the states nothing leads to. */
 function flows() {
-  const states = data.states.filter(inArea), ids = new Map(states.map((s) => [s.id, s]));
+  const states = data.states, ids = new Map(states.map((s) => [s.id, s]));
   const parent = new Map(states.map((s) => [s.id, s.id]));
   const find = (id) => { while (parent.get(id) !== id) id = parent.get(id); return id; };
   const into = new Map();
@@ -314,7 +391,7 @@ function flows() {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(s);
   }
-  return [...groups.values()].map((members) => {
+  const out = [...groups.values()].map((members) => {
     const roots = members.filter((s) => !into.has(s.id));
     const starts = roots.length ? roots : [members[0]];
     const seen = new Set();
@@ -326,17 +403,35 @@ function flows() {
       }).map(([action, id]) => [action, tree(ids.get(id))]);
       return next.length ? { s, next } : { s };
     };
-    return { id: starts[0].id, name: starts[0].name, trees: starts.map(tree) };
+    return { id: starts[0].id, start: starts[0], trees: starts.map(tree) };
   });
+  // A flow is named by the page it starts on, or by its first screen when two flows start on the same page.
+  const byPage = (f) => f.start.page ?? f.start.area ?? f.start.name;
+  const named = out.map((f) => ({ id: f.id, name: out.filter((o) => byPage(o) === byPage(f)).length > 1 ? `${byPage(f)} · ${f.start.name}` : byPage(f), trees: f.trees }));
+  // Screens no link reaches still belong on the canvas: they close the view, in one row.
+  const linked = new Set();
+  const walk = (t) => { linked.add(t.s.id); (t.next ?? []).forEach(([, c]) => walk(c)); };
+  named.forEach((f) => f.trees.forEach(walk));
+  const rest = states.filter((s) => !linked.has(s.id));
+  return rest.length ? [...named, { id: "other-screens", name: "Other screens", other: true, trees: rest.map((s) => ({ s })) }] : named;
 }
 
 /* Flows: each tree left to right, one row for each end screen; a screen sits on the row of its first next screen. */
 function drawFlows() {
-  const FW = width, DH = width >= 768 ? 900 : 844, COL = FW + 560, GAPY = 240, BETWEEN = 1500;
-  const svg = document.createElementNS(svgNS, "svg"); svg.setAttribute("class", "wires");
+  const FW = width, DH = width >= 768 ? 900 : 844, COL = FW + 720, GAPY = 240, BETWEEN = 1500;
   let top = 0, maxX = 0;
-  for (const fl of flows().filter((f) => !pick || f.id === pick)) {
+  for (const fl of flows()) {
     const counted = heading(top, fl.name);
+    if (fl.other) {
+      const GAP = width >= 768 ? 160 : 120;
+      let bottom = top;
+      fl.trees.forEach((t, i) => { bottom = Math.max(bottom, top + screen(t.s, i * (FW + GAP), top)); maxX = Math.max(maxX, i * (FW + GAP) + FW); });
+      counted("");
+      rects[fl.id] = { x: 0, y: top, h: DH };
+      if (!firstBox) firstBox = { y: top, h: DH };
+      top = bottom + BETWEEN;
+      continue;
+    }
     let rows = 0; const rowH = [];
     const place = (node, depth) => {
       node.depth = depth;
@@ -352,15 +447,9 @@ function drawFlows() {
       bottom = Math.max(bottom, y + screen(node.s, x, y));
       maxX = Math.max(maxX, x + FW);
       if (!node.next) return;
-      const py = y + DH / 2, tx = x + FW + 80;
-      wire(svg, `M${x + FW + 16} ${py} H${tx}`);
-      if (node.next.length > 1) junction(svg, tx, py);
+      // Each link runs from the middle of this screen's right edge to the middle of the next screen's left edge.
       for (const [text, child] of node.next) {
-        const cx = child.depth * COL, cy = rowY[child.row] + DH / 2;
-        if (cy === py) wire(svg, `M${tx} ${py} H${cx - 24}`);
-        else wire(svg, `M${tx} ${py} V${cy - 32} Q${tx} ${cy} ${tx + 32} ${cy} H${cx - 24}`);
-        head(svg, cx - 8, cy);
-        label(text, tx + 40, cx - 40, cy);
+        link(node.s.id, child.s.id, text, x + FW, y + DH / 2, child.depth * COL, rowY[child.row] + DH / 2);
         draw(child);
       }
     };
@@ -370,14 +459,13 @@ function drawFlows() {
     if (!firstBox) firstBox = { y: top, h: DH };
     top = bottom + BETWEEN;
   }
-  world.appendChild(svg);
   return { w: maxX, h: Math.max(0, top - BETWEEN) };
 }
 
 /* Pages: one panel for each page the recipes name, its screens in one row. */
 function pages() {
   const out = new Map();
-  for (const s of data.states.filter(inArea)) {
+  for (const s of data.states) {
     const key = `${s.area ?? ""}\u0000${s.page ?? s.area ?? "Screens"}`;
     if (!out.has(key)) out.set(key, { key, area: s.area ?? "", title: s.page ?? s.area ?? "Screens", states: [] });
     out.get(key).states.push(s);
@@ -413,22 +501,65 @@ function render(keepView) {
   }
   if (keepView) apply(); else fitFirst();
   const wasComparing = comparing; comparing = null;
+  drawPins();
+  fillSide();
   if (selected && document.querySelector(`.frame[data-id="${CSS.escape(selected)}"]`)) { select(selected, true); if (wasComparing === selected) setCompare(selected); }
   else if (selected) deselect();
 }
 
+/* Links in screen pixels, so every curve, gap, port and arrowhead keeps one size at every zoom. Each link is one smooth S-curve
+   across the whole gap, leaving its source and landing on its target level, so its turns stay gentle however far it drops.
+   Its label sits on the middle of the curve, and the line is cut away under the text with even space round it. The line fades
+   in from the source, so its direction reads along its length. A hollow port sits on the source's edge and a fine chevron
+   lands on the target. */
+let hoverId = null;
+const LABEL_SPACE = 6;
+function drawLinks(s) {
+  let svg = names.querySelector("svg.links");
+  if (!svg) { svg = document.createElementNS(svgNS, "svg"); svg.setAttribute("class", "links"); names.prepend(svg); }
+  const focus = selected ?? hoverId;
+  let defs = "", lines = "", cuts = "", ports = new Map();
+  edges.forEach((e, i) => {
+    const ax = view.x + e.sx * s, ay = view.y + e.sy * s, bx = view.x + e.ex * s, by = view.y + e.ey * s;
+    const on = !!focus && (e.from === focus || e.to === focus);
+    const colour = on ? "var(--sel)" : "var(--connector)";
+    const tip = bx - 3, k = (tip - ax) * .5;
+    const d = Math.abs(by - ay) < 1 ? `M${ax + 3} ${ay} H${tip}` : `M${ax + 3} ${ay} C${ax + k} ${ay} ${tip - k} ${by} ${tip} ${by}`;
+    // The label sits at the curve's midpoint, if the gap between the screens holds it with room each side.
+    e.el.classList.toggle("on", on);
+    e.el.hidden = false;
+    const w = e.el.offsetWidth, h = e.el.offsetHeight, mx = (ax + tip) / 2, my = (ay + by) / 2;
+    const fits = w + 2 * LABEL_SPACE + 32 <= tip - ax;
+    e.el.hidden = !fits;
+    if (fits) {
+      e.el.style.cssText = `left:${mx}px;top:${my}px`;
+      cuts += `<rect x="${mx - w / 2 - LABEL_SPACE}" y="${my - h / 2 - 3}" width="${w + 2 * LABEL_SPACE}" height="${h + 6}" rx="4" fill="#000"/>`;
+    }
+    defs += `<linearGradient id="lk${i}" gradientUnits="userSpaceOnUse" x1="${ax}" y1="0" x2="${tip}" y2="0"><stop offset="0" style="stop-color:${colour};stop-opacity:.25"/><stop offset=".5" style="stop-color:${colour};stop-opacity:1"/></linearGradient>`;
+    lines += `<path stroke="url(#lk${i})" d="${d}"/><path class="hd${on ? " on" : ""}" d="M${tip - 5} ${by - 3.5} L${tip} ${by} L${tip - 5} ${by + 3.5}"/>`;
+    ports.set(e.from, { x: ax, y: ay, on: on || !!ports.get(e.from)?.on });
+  });
+  let rings = "";
+  for (const p of ports.values()) rings += `<circle class="${p.on ? "on" : ""}" cx="${p.x}" cy="${p.y}" r="3"/>`;
+  // The lines are drawn through a mask that cuts them away under each label.
+  defs += `<mask id="lkcut" maskUnits="userSpaceOnUse" x="0" y="0" width="${innerWidth}" height="${innerHeight}"><rect width="${innerWidth}" height="${innerHeight}" fill="#fff"/>${cuts}</mask>`;
+  svg.innerHTML = `<defs>${defs}</defs><g mask="url(#lkcut)">${lines}</g>${rings}`;
+}
+
 /* ---------- The canvas ---------- */
 function room() {
-  const top = document.querySelector(".top-left").getBoundingClientRect().bottom + 24;
+  const top = document.querySelector(".top-right").getBoundingClientRect().bottom + 24;
   const bot = innerHeight - document.querySelector(".bottom").getBoundingClientRect().top + 24;
-  return { left: phoneView() ? 16 : 48, top, w: vp.clientWidth, h: vp.clientHeight - top - bot };
+  // The section surface reaches 24 px left of its screens, so this keeps 24 px between the panel and the surface.
+  const side = sideOpen && innerWidth >= 1024 ? $("side").getBoundingClientRect().right + 48 : 0;
+  return { left: Math.max(side, phoneView() ? 16 : 48), top, w: vp.clientWidth, h: vp.clientHeight - top - bot };
 }
 function apply(anim) {
   world.classList.toggle("anim", !!anim);
   world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.s})`;
   world.style.setProperty("--inv", String(1 / view.s));
   world.classList.toggle("far", view.s < 0.22);
-  placeNames(anim);
+  placeNames(anim); placePop();
   if (anim) { tool.style.opacity = "0"; setTimeout(() => { placeTool(); tool.style.opacity = ""; world.classList.remove("anim"); }, 380); } else placeTool();
 }
 /* The screen space a section header takes above its first row: inset, title, count chips, gap, frame names. */
@@ -461,20 +592,16 @@ function placeNames(anim) {
       const d = marks.children[4]; d.textContent = `${sel.w} × ${sel.h}`; d.style.left = (L + R) / 2 + "px"; d.style.top = B + 10 + "px";
       for (const el of [marks.children[5], marks.children[6]]) Object.assign(el.style, { left: L + "px", top: T + "px", width: R - L + "px", height: B - T + "px" });
     }
-    for (const { surf, el, y, w, bottom } of sections) {
+    for (const { el, y } of sections) {
       const top = view.y + y * s - k.h;
-      surf.style.cssText = `left:${view.x - k.pad}px;top:${top}px;width:${w * s + 2 * k.pad}px;height:${(bottom - y) * s + k.h + k.pad}px;border-radius:${k.named ? 16 : 8}px`;
       el.style.cssText = `left:${view.x}px;top:${top + k.g1}px`;
       el.firstChild.style.fontSize = k.t + "px";
       el.children[1].hidden = !k.named;
     }
-    for (const { el, x1, x2, y, need } of edges) {
-      const w = (x2 - x1) * s;
-      el.hidden = s < 0.22 || w < need;
-      if (!el.hidden) el.style.cssText = `left:${view.x + x1 * s}px;top:${view.y + y * s - 22}px;width:${w}px`;
-    }
+    drawLinks(s);
   };
-  if (anim) { names.style.opacity = "0"; nameTimer = setTimeout(() => { go(); names.style.opacity = ""; }, 360); } else go();
+  // A redraw that cancels an animated one must still show the names again.
+  if (anim) { names.style.opacity = "0"; nameTimer = setTimeout(() => { go(); names.style.opacity = ""; }, 360); } else { go(); names.style.opacity = ""; }
 }
 function zoomAt(f, cx, cy, anim) {
   const s = Math.min(4, Math.max(0.05, view.s * f)), k = s / view.s;
@@ -495,6 +622,7 @@ function goRect(rect, anim = true) {
 
 /* ---------- Selection ---------- */
 function markSel() {
+  $("slist").querySelectorAll(".tr[data-id]").forEach((r) => { r.classList.toggle("on", r.dataset.id === selected); r.querySelector(".go").setAttribute("aria-current", String(r.dataset.id === selected)); });
   document.querySelectorAll(".frame.sel, .fname.sel").forEach((e) => e.classList.remove("sel"));
   if (selected) document.querySelectorAll(`.frame[data-id="${CSS.escape(selected)}"], .fname[data-id="${CSS.escape(selected)}"]`).forEach((e) => e.classList.add("sel"));
   placeNames();
@@ -556,7 +684,7 @@ function placeTool() {
   const f = document.querySelector(`.frame[data-id="${CSS.escape(selected)}"]`);
   if (!f) { tool.hidden = true; return; }
   const r = f.getBoundingClientRect(), w = tool.offsetWidth, h = tool.offsetHeight;
-  const top = document.querySelector(".top-left").getBoundingClientRect().bottom + 12, bottom = document.querySelector(".bottom").getBoundingClientRect().top - 12 - h;
+  const top = document.querySelector(".top-right").getBoundingClientRect().bottom + 12, bottom = document.querySelector(".bottom").getBoundingClientRect().top - 12 - h;
   tool.style.left = Math.min(innerWidth - w - 12, Math.max(12, (Math.max(r.left, 0) + Math.min(r.right, innerWidth)) / 2 - w / 2)) + "px";
   tool.style.top = Math.min(bottom, Math.max(top, r.top + 16)) + "px";
 }
@@ -603,85 +731,95 @@ vp.addEventListener("focusin", (e) => {
   if (t < r.top || t + Math.min(f.offsetHeight * s, r.h) > r.top + r.h) dy = r.top - t;
   if (dx || dy) { view.x += dx; view.y += dy; apply(true); }
 });
-const peek = (e, on) => { const f = e.target.closest?.(".frame"); if (f) names.querySelector(`.fname[data-id="${CSS.escape(f.dataset.id)}"]`)?.classList.toggle("peek", on); };
+const peek = (e, on) => {
+  const f = e.target.closest?.(".frame"); if (!f) return;
+  names.querySelector(`.fname[data-id="${CSS.escape(f.dataset.id)}"]`)?.classList.toggle("peek", on);
+  hoverId = on ? f.dataset.id : null; drawLinks(view.s);
+};
 vp.addEventListener("pointerover", (e) => peek(e, true)); vp.addEventListener("pointerout", (e) => peek(e, false));
 vp.addEventListener("focusin", (e) => peek(e, true)); vp.addEventListener("focusout", (e) => peek(e, false));
 vp.addEventListener("scroll", () => { vp.scrollLeft = 0; vp.scrollTop = 0; });
 
-/* Menus: each native select keeps the value and fires change; a button and a list in the app's style stand in for it. */
-function menu(sel) {
-  const wrap = sel.parentElement, btn = document.createElement("button"), list = document.createElement("div");
-  btn.type = "button"; btn.className = "selbtn"; btn.setAttribute("aria-haspopup", "listbox"); btn.setAttribute("aria-expanded", "false");
-  list.className = "menu"; list.setAttribute("role", "listbox"); list.tabIndex = -1; list.hidden = true; list.id = sel.id + "-list";
-  btn.setAttribute("aria-controls", list.id);
-  wrap.prepend(btn); wrap.appendChild(list);
-  let active = 0;
-  const opts = () => [...sel.options];
-  const sync = () => { const t = sel.selectedOptions[0]?.textContent || ""; btn.innerHTML = `<span>${esc(t)}</span>${icon("alt-arrow-down-linear")}`; btn.setAttribute("aria-label", `${sel.getAttribute("aria-label")}: ${t}`); };
-  const paint = () => [...list.children].forEach((o, i) => { o.classList.toggle("active", i === active); if (i === active) { list.setAttribute("aria-activedescendant", o.id); o.scrollIntoView({ block: "nearest" }); } });
-  const close = (back) => { list.hidden = true; btn.setAttribute("aria-expanded", "false"); if (back) btn.focus(); };
-  const choose = (i) => { const o = opts()[i]; if (o && sel.value !== o.value) { sel.value = o.value; sel.dispatchEvent(new Event("change")); } sync(); close(true); };
-  const open = () => {
-    list.innerHTML = opts().map((o, i) => `<div class="opt" role="option" id="${sel.id}-o${i}" aria-selected="${o.selected}" data-i="${i}">${icon("check-linear")}${esc(o.textContent)}</div>`).join("");
-    active = Math.max(0, sel.selectedIndex); list.hidden = false; btn.setAttribute("aria-expanded", "true"); paint(); list.focus();
-  };
-  btn.addEventListener("click", () => (list.hidden ? open() : close(true)));
-  btn.addEventListener("keydown", (e) => { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); open(); } });
-  list.addEventListener("click", (e) => { const o = e.target.closest(".opt"); if (o) choose(Number(o.dataset.i)); });
-  list.addEventListener("pointermove", (e) => { const o = e.target.closest(".opt"); if (o && Number(o.dataset.i) !== active) { active = Number(o.dataset.i); paint(); } });
-  list.addEventListener("keydown", (e) => {
-    const n = list.children.length;
-    if (e.key === "ArrowDown") active = Math.min(n - 1, active + 1);
-    else if (e.key === "ArrowUp") active = Math.max(0, active - 1);
-    else if (e.key === "Home") active = 0;
-    else if (e.key === "End") active = n - 1;
-    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); choose(active); return; }
-    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(true); return; }
-    else if (e.key === "Tab") { close(false); return; }
-    else return;
-    e.preventDefault(); paint();
-  });
-  document.addEventListener("pointerdown", (e) => { if (!list.hidden && !wrap.contains(e.target)) close(false); });
-  sel.sync = sync; sync();
-}
-
 /* ---------- Controls ---------- */
-function fillMenus() {
-  const pickSel = $("pickSel"), areaSel = $("areaSel");
-  pickSel.setAttribute("aria-label", mode === "flows" ? "Flow" : "Page");
-  pickSel.innerHTML = mode === "flows"
-    ? `<option value="">All flows</option>` + flows().map((f) => `<option value="${esc(f.id)}">${esc(f.name)}</option>`).join("")
-    : `<option value="">All pages</option>` + pages().map((g) => `<option value="${esc(g.key)}">${esc(g.title)}</option>`).join("");
-  pickSel.value = mode === "flows" ? pick : "";
-  const areas = [...new Set(data.states.map((s) => s.area).filter(Boolean))].sort();
-  areaSel.innerHTML = `<option value="">All areas</option>` + areas.map((a) => `<option>${esc(a)}</option>`).join("");
-  areaSel.value = areas.includes(area) ? area : "";
-  areaSel.parentElement.hidden = areas.length < 2;
-  pickSel.sync?.(); areaSel.sync?.();
-}
 function setMode(m) {
-  mode = m; pick = "";
+  mode = m;
   document.querySelectorAll(".mode button").forEach((o) => o.setAttribute("aria-pressed", String(o.dataset.view === m)));
 }
 function fillWidths() {
   if (!data.widths.includes(width)) width = phoneView() ? Math.min(...data.widths) : data.widths[0];
   $("widths").innerHTML = data.widths.map((w) => `<button type="button" data-w="${w}" aria-pressed="${w === width}" aria-label="${w} pixels wide" title="${w} pixels wide">${icon(w >= 768 ? "monitor-linear" : "smartphone-linear")}</button>`).join("");
 }
-document.querySelectorAll(".mode button").forEach((t) => t.addEventListener("click", () => { setMode(t.dataset.view); fillMenus(); deselect(); render(); }));
+document.querySelectorAll(".mode button").forEach((t) => t.addEventListener("click", () => { setMode(t.dataset.view); deselect(); render(); }));
 $("widths").addEventListener("click", (e) => { const b = e.target.closest("[data-w]"); if (!b) return; width = Number(b.dataset.w); fillWidths(); render(); });
-$("pickSel").addEventListener("change", (e) => {
-  const v = e.target.value;
-  if (mode === "flows") { pick = v; render(); }
-  else if (v && rects[v]) goRect(rects[v]); else fitFirst();
+/* Screens panel: every screen in a tree, as the canvas groups them. Pages view: area, then page, then its screens.
+   Flows view: each flow, then its screens in the order a person reaches them. Choosing a screen moves the canvas to it and selects it;
+   choosing a page or a flow moves the canvas to its section. */
+let sideOpen = false;
+const shut = new Set();
+function setSide(open, remember = true) {
+  sideOpen = open;
+  $("side").classList.toggle("open", open);
+  document.body.classList.toggle("side-open", open);
+  $("slist").hidden = !open;
+  $("sideBtn").setAttribute("aria-expanded", String(open));
+  $("sideBtn").setAttribute("aria-label", open ? "Hide the screens list" : "Show the screens list");
+  if (!remember) return;
+  try { localStorage.setItem("atlas.side", open ? "open" : "closed"); }
+  catch (error) { console.warn("Atlas could not remember whether the screens list is open, for example in a private window.", error); }
+}
+$("sideBtn").addEventListener("click", () => { setSide(!sideOpen); if (data) apply(); });
+function fillSide() {
+  const focusKey = document.activeElement?.closest?.(".slist [data-key]")?.dataset.key, focusPart = document.activeElement?.classList.contains("chev") ? ".chev" : ".go";
+  const screenIcon = icon(width >= 768 ? "monitor-linear" : "smartphone-linear");
+  const chev = (key, name) => `<button class="chev" type="button" aria-expanded="${!shut.has(key)}" aria-label="${shut.has(key) ? "Open" : "Close"} ${esc(name)}">${icon("alt-arrow-right-linear")}</button>`;
+  const screen = (s, children = "") => {
+    const shot = shotOf(s.id), changed = shot?.compare?.status === "changed";
+    const own = openTasks(s.id), review = own.some((t) => t.status === "ready-for-review");
+    const label = [s.name, shot ? "" : "not captured yet", changed ? "changed from live" : "", review ? "a task to review" : own.length ? `${own.length} ${own.length === 1 ? "task" : "tasks"}` : ""].filter(Boolean).join(", ");
+    const key = `s:${s.id}`;
+    return `<li><div class="tr${s.id === selected ? " on" : ""}" data-id="${esc(s.id)}" data-key="${esc(key)}">${children ? chev(key, s.name) : `<span class="gap"></span>`}<button class="go" type="button" aria-current="${s.id === selected}" aria-label="${esc(label)}">${screenIcon}<span class="nm">${esc(s.name)}</span>${changed ? `<span class="chg-dot" title="Changed from live"></span>` : ""}${review ? `<span class="st ready-for-review">Review</span>` : own.length ? `<span class="n">${own.length}</span>` : ""}</button></div>${children && !shut.has(key) ? `<ul>${children}</ul>` : ""}</li>`;
+  };
+  const node = (cls, key, name, glyph, count, children, go = "") =>
+    `<li><div class="tr ${cls}" data-key="${esc(key)}">${chev(key, name)}<button class="go" type="button"${go}>${glyph}<span class="nm">${esc(name)}</span>${count == null ? "" : `<span class="count">${count}</span>`}</button></div>${shut.has(key) ? "" : `<ul>${children}</ul>`}</li>`;
+  let body = "", count = 0;
+  if (mode === "flows") {
+    const step = (t) => screen(t.s, (t.next ?? []).map(([, child]) => step(child)).join(""));
+    const fl = flows();
+    count = new Set(fl.flatMap((f) => { const ids = []; const walk = (t) => { ids.push(t.s.id); (t.next ?? []).forEach(([, c]) => walk(c)); }; f.trees.forEach(walk); return ids; })).size;
+    body = fl.map((f) => node("page", `f:${f.id}`, f.name, f.other ? "" : icon("routing-linear"), null, f.trees.map(step).join(""), ` data-rect="${esc(f.id)}"`)).join("");
+  } else {
+    const groups = pages();
+    count = data.states.length;
+    const areas = [...new Set(groups.map((g) => g.area))];
+    const pageNode = (g) => node("page", `p:${g.key}`, g.title, icon("file-linear"), null, g.states.map((s) => screen(s)).join(""), ` data-rect="${esc(g.key)}"`);
+    body = areas.length > 1 || areas[0]
+      ? areas.map((a) => node("grp", `a:${a}`, a || "Other", "", null, groups.filter((g) => g.area === a).map(pageNode).join(""))).join("")
+      : groups.map(pageNode).join("");
+  }
+  $("slist").innerHTML = `<ul>${node("sec", "screens", "Screens", "", count, body)}</ul>`;
+  if (focusKey) $("slist").querySelector(`[data-key="${CSS.escape(focusKey)}"] ${focusPart}`)?.focus();
+}
+$("slist").addEventListener("click", (e) => {
+  const row = e.target.closest(".tr"); if (!row) return;
+  if (e.target.closest(".chev") || (!row.dataset.id && !e.target.closest("[data-rect]"))) {
+    const key = row.dataset.key;
+    if (shut.has(key)) shut.delete(key); else shut.add(key);
+    fillSide(); return;
+  }
+  const rectKey = e.target.closest("[data-rect]")?.dataset.rect;
+  if (rectKey) { if (rects[rectKey]) goRect(rects[rectKey]); return; }
+  const l = at(row.dataset.id); if (!l) return;
+  goRect({ x: l.x, y: l.y, h: l.h });
+  select(row.dataset.id);
+  if (innerWidth < 1024) setSide(false, false);
 });
-$("areaSel").addEventListener("change", (e) => { area = e.target.value; pick = ""; fillMenus(); render(); });
 
 /* The top bar: which commit the screens show, and how far the code has moved since. */
 function fillFreshness() {
   $("brand").textContent = data.project.name;
   document.title = `${data.project.name} · Atlas`;
   const shown = data.shown, branch = data.branch.name ?? "detached";
-  $("ver").innerHTML = shown ? `${esc(branch)} · <code>${esc(shown.commit)}</code>` : `${esc(branch)} · <code>${esc(data.branch.commit ?? "no commit")}</code>`;
+  $("ver").innerHTML = `${icon("git-branch-linear")}<span class="b">${esc(branch)}</span><code>${esc(shown ? shown.commit : data.branch.commit ?? "no commit")}</code>`;
   const anyUncommitted = Object.values(data.shots).some((byWidth) => Object.values(byWidth).some((e) => e.uncommitted));
   let note = "";
   if (!shown) note = data.states.length ? "Nothing captured yet" : "";
@@ -689,7 +827,6 @@ function fillFreshness() {
   else if (anyUncommitted) note = "Includes uncommitted changes";
   $("fresh").hidden = !note;
   $("fresh").textContent = note;
-  $("vdot").classList.toggle("stale", !!note);
 }
 
 /* The activity line: what an agent is doing right now, from the live stream. */
@@ -698,10 +835,216 @@ function showActivity(a) {
   const name = byId().get(a.state)?.name ?? a.state ?? "a screen";
   const el = $("act");
   clearTimeout(actTimer);
-  el.innerHTML = a.phase === "start" ? `<i></i>Capturing ${esc(name)}` : a.phase === "done" ? `Captured ${esc(name)}` : `Capture of ${esc(name)} failed`;
+  el.innerHTML = a.tool === "atlas_task_update"
+    ? (a.phase === "start" ? "<i></i>Updating a task" : a.phase === "done" ? "Updated a task" : "A task update failed")
+    : a.phase === "start" ? `<i></i>Capturing ${esc(name)}` : a.phase === "done" ? `Captured ${esc(name)}` : `Capture of ${esc(name)} failed`;
   el.hidden = false;
   if (a.phase !== "start") actTimer = setTimeout(() => { el.hidden = true; }, 4000);
 }
+
+/* Comment mode: with Comment on, the element under the pointer is outlined. Click it to mark that element, or drag to mark a box,
+   and the note opens beside the mark. Each task is a numbered pin on its screen; a pin opens the task's thread in the same place. */
+let commenting = false, draft = null, popTask = null, sendingBack = null;
+const STATUS_TEXT = { open: "Open", "in-progress": "In progress", "ready-for-review": "Ready for review", approved: "Approved", "sent-back": "Sent back" };
+const layouts = new Map();
+/* The element list of a capture, fetched once. */
+function layoutFor(id) {
+  const url = shotOf(id)?.layout; if (!url) return null;
+  if (!layouts.has(url)) { layouts.set(url, null); fetch(url).then((r) => r.json()).then((items) => layouts.set(url, items)).catch(() => layouts.delete(url)); }
+  return layouts.get(url);
+}
+/* The element under a point on a screen: the smallest that is not a surface, or else the smallest surface. */
+function elementAt(id, x, y) {
+  const hit = (layoutFor(id) ?? []).filter((t) => x >= t.x && x <= t.x + t.w && y >= t.y && y <= t.y + t.h);
+  const by = (a, b) => a.w * a.h - b.w * b.h;
+  return hit.filter((t) => !t.surface).sort(by)[0] ?? hit.sort(by)[0] ?? null;
+}
+const frameOf = (id) => document.querySelector(`.frame[data-id="${CSS.escape(id)}"]`);
+const at = (id) => labels.find((l) => l.n.dataset.id === id);
+function setCommenting(on) {
+  commenting = on;
+  document.body.classList.toggle("commenting", on);
+  $("commentBtn").setAttribute("aria-pressed", String(on));
+  if (on) { setCompare(null); deselect(); labels.forEach((l) => layoutFor(l.n.dataset.id)); } else { world.querySelector(".hover-el")?.remove(); closePop(); }
+}
+$("commentBtn").addEventListener("click", () => setCommenting(!commenting));
+/* Points on a frame, in the screen's own pixels. */
+const local = (f, e) => { const r = f.getBoundingClientRect(), k = r.width / f.offsetWidth; return { x: Math.min(f.offsetWidth, Math.max(0, (e.clientX - r.left) / k)), y: Math.min(f.offsetHeight, Math.max(0, (e.clientY - r.top) / k)) }; };
+function outline(cls, id, box) {
+  world.querySelector(`.${cls}`)?.remove();
+  const a = id && box && at(id); if (!a) return null;
+  const el = put("i", cls, a.x + box.x, a.y + box.y, box.w, box.h); el.setAttribute("aria-hidden", "true"); return el;
+}
+vp.addEventListener("pointermove", (e) => {
+  if (!commenting || draft || e.buttons) return;
+  const f = e.target.closest?.(".frame:not(.absent)");
+  const el = f && elementAt(f.dataset.id, local(f, e).x, local(f, e).y);
+  outline("hover-el", f?.dataset.id, el);
+});
+/* In comment mode, a click on a screen marks the element under it; a drag marks a box. Dragging the empty canvas still moves it. */
+vp.addEventListener("pointerdown", (e) => {
+  const f = commenting && e.target.closest?.(".frame:not(.absent)"); if (!f) return;
+  e.stopPropagation(); f.setPointerCapture(e.pointerId);
+  const id = f.dataset.id, start = local(f, e);
+  let box = null;
+  const move = (ev) => {
+    const p = local(f, ev);
+    if (Math.hypot(p.x - start.x, p.y - start.y) * view.s < 4) return;
+    box = { x: Math.round(Math.min(start.x, p.x)), y: Math.round(Math.min(start.y, p.y)), w: Math.max(1, Math.round(Math.abs(p.x - start.x))), h: Math.max(1, Math.round(Math.abs(p.y - start.y))) };
+    world.querySelector(".hover-el")?.remove();
+    outline("tmark", id, box);
+  };
+  f.addEventListener("pointermove", move);
+  f.addEventListener("pointerup", () => {
+    f.removeEventListener("pointermove", move);
+    const el = box ? null : elementAt(id, start.x, start.y);
+    const area = box ?? (el ? { x: el.x, y: el.y, w: el.w, h: el.h } : null);
+    openDraft(id, area, el?.text || (el ? el.tag : null));
+  }, { once: true });
+}, { capture: true });
+/* A keyboard path: Enter on a screen in comment mode marks the whole screen. */
+vp.addEventListener("keydown", (e) => {
+  if (!commenting || (e.key !== "Enter" && e.key !== " ")) return;
+  const f = e.target.closest?.(".frame:not(.absent)"); if (!f) return;
+  e.preventDefault(); e.stopPropagation(); openDraft(f.dataset.id, null, null);
+}, { capture: true });
+
+function openDraft(id, area, name) {
+  popTask = null; sendingBack = null;
+  draft = { id, area, name, back: document.activeElement };
+  world.querySelector(".hover-el")?.remove();
+  outline("tmark", id, area);
+  const s = byId().get(id);
+  const pop = $("pop");
+  pop.setAttribute("aria-label", `Ask for a change on ${s.name}`);
+  pop.innerHTML = `<form id="tform">
+    <p class="on">On <b>${esc(name ? `“${name}”` : area ? "the marked part" : "the whole screen")}</b> · ${esc(s.name)}</p>
+    <label class="vh" for="tdraft">What should change</label>
+    <textarea id="tdraft" placeholder="What should change?" aria-describedby="terr"></textarea>
+    <p class="err" id="terr" role="alert" hidden></p>
+    <div class="row"><button class="rowbtn" type="button" data-t="cancel">Cancel</button><button class="btn" type="submit">Send to agent</button></div>
+  </form>`;
+  pop.hidden = false; placePop();
+  $("tdraft").focus();
+}
+function closePop() {
+  const back = draft?.back;
+  draft = null; popTask = null; sendingBack = null;
+  world.querySelector(".tmark")?.remove();
+  document.querySelectorAll('.pin[aria-expanded="true"]').forEach((p) => p.setAttribute("aria-expanded", "false"));
+  $("pop").hidden = true;
+  if (back?.isConnected && !commenting) back.focus({ preventScroll: true });
+}
+/* The popover sits below the mark, or above it when there is no room, kept on screen. */
+function placePop() {
+  const pop = $("pop"); if (pop.hidden) return;
+  const id = draft?.id ?? popTask?.state, a = id && at(id);
+  if (!a) { closePop(); return; }
+  const area = draft ? draft.area : popTask.area;
+  const box = area ?? { x: 0, y: 0, w: a.w, h: Math.min(a.h, 200) };
+  const L = view.x + (a.x + box.x) * view.s, T = view.y + (a.y + box.y) * view.s, B = T + box.h * view.s;
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  pop.style.left = Math.min(innerWidth - w - 12, Math.max(12, L)) + "px";
+  pop.style.top = (B + 8 + h <= innerHeight - 12 ? B + 8 : Math.max(12, T - 8 - h)) + "px";
+}
+/* Pins: one for each task still to finish on the shown screens, numbered in the order they were made. */
+function drawPins() {
+  world.querySelectorAll(".pin").forEach((p) => p.remove());
+  for (const l of labels) {
+    const id = l.n.dataset.id;
+    openTasks(id).slice().reverse().forEach((t, i) => {
+      const box = t.area ?? { x: l.w - 12, y: 12, w: 0, h: 0 };
+      const p = put("button", `pin ${t.status}`, l.x + box.x + box.w, l.y + box.y, null, null, String(i + 1));
+      p.type = "button"; p.dataset.task = t.id;
+      p.setAttribute("aria-label", `Task ${i + 1} on ${byId().get(id)?.name ?? id}: ${STATUS_TEXT[t.status]}. ${t.words.slice(0, 80)}`);
+      p.setAttribute("aria-expanded", String(popTask?.id === t.id));
+    });
+  }
+  if (draft) outline("tmark", draft.id, draft.area);
+  if (popTask) { const t = (data.tasks ?? []).find((x) => x.id === popTask.id); if (t) openThread(t, true); else closePop(); }
+}
+world.addEventListener("click", (e) => { const p = e.target.closest(".pin"); if (p) { e.stopPropagation(); openThread(data.tasks.find((t) => t.id === p.dataset.task)); } });
+vp.addEventListener("pointerdown", (e) => { if (e.target.closest(".pin")) e.stopPropagation(); }, { capture: true });
+/* The part of a picture around a box, scaled to the crop's width: the box and 24 px around it, or the whole screen. */
+function crop(png, task, label) {
+  const full = { x: 0, y: 0, w: task.width, h: task.width >= 768 ? 900 : 844 };
+  const b = task.area ? { x: Math.max(0, task.area.x - 24), y: Math.max(0, task.area.y - 24), w: task.area.w + 48, h: task.area.h + 48 } : full;
+  return `<div class="crop" style="aspect-ratio:${b.w} / ${b.h}"><img src="${esc(png)}" alt="${esc(label)}" style="width:${(task.width / b.w) * 100}%;left:${(-b.x / b.w) * 100}%;top:${(-b.y / b.h) * 100}%"><span aria-hidden="true">${esc(label)}</span></div>`;
+}
+const promptOf = (t) => {
+  const name = byId().get(t.state)?.name ?? t.state;
+  return `Atlas task ${t.id}, on "${name}" at ${t.width} px: ${t.words}${t.element ? `\nThe marked element is the ${t.element.tag} "${t.element.text}".` : ""}\nCall atlas_tasks to see the picture with the marked box. Change the code, capture ${t.state} with atlas_capture, then set the task to ready-for-review with atlas_task_update.`;
+};
+function openThread(t, refresh) {
+  if (!t) return;
+  const first = popTask?.id !== t.id;
+  draft = null; popTask = t;
+  if (first) sendingBack = null;
+  outline("tmark", t.state, t.area);
+  document.querySelectorAll(".pin").forEach((p) => p.setAttribute("aria-expanded", String(p.dataset.task === t.id)));
+  const last = t.log.at(-1), agentNote = [...t.log].reverse().find((l) => l.by === "agent" && l.note);
+  const review = t.status === "ready-for-review";
+  const pop = $("pop");
+  pop.setAttribute("aria-label", `Task on ${byId().get(t.state)?.name ?? t.state}`);
+  pop.innerHTML = `<div class="thread">
+    <div class="tmeta"><span class="st ${t.status}">${STATUS_TEXT[t.status]}</span><span>${ago(last.at)}</span>${t.status !== "approved" ? `<button class="copyp" type="button" data-t="prompt">Copy as prompt</button>` : ""}</div>
+    <p class="w">${esc(t.words)}</p>
+    ${t.status === "sent-back" && last.note ? `<p class="note">You said: ${esc(last.note)}</p>` : ""}
+    ${agentNote && (review || t.status === "approved") ? `<p class="note">Agent: ${esc(agentNote.note)}</p>` : ""}
+    ${review && t.before && t.after ? `<div class="crops">${crop(t.before, t, "Before")}${crop(t.after.png, t, "After")}</div>` : ""}
+    ${sendingBack === t.id
+      ? `<label class="vh" for="tnote">What is still wrong</label><textarea id="tnote" placeholder="What is still wrong?" style="margin-top:10px"></textarea>
+         <div class="row"><button class="rowbtn" type="button" data-t="cancel-back">Cancel</button><button class="btn" type="button" data-t="send-back">Send back</button></div>`
+      : review ? `<div class="row"><button class="rowbtn" type="button" data-t="back">Send back</button><button class="btn" type="button" data-t="approve">Approve</button></div>` : ""}
+    <p class="err" id="terr" role="alert" hidden></p>
+  </div>`;
+  pop.hidden = false; placePop();
+  if (!refresh) pop.querySelector("button")?.focus();
+}
+async function postTask(path, body) {
+  const res = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const out = await res.json();
+  if (!res.ok) throw new Error(out.error ?? `Atlas answered ${res.status}`);
+  return out;
+}
+const showErr = (text) => { const err = $("terr"); err.textContent = text; err.hidden = false; placePop(); };
+$("pop").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const words = $("tdraft").value.trim();
+  if (!words) { showErr("Write what should change, then send it."); $("tdraft").focus(); return; }
+  try {
+    await postTask("/api/tasks", { state: draft.id, width, commit: data.shown.commit, words, ...(draft.area ? { area: draft.area } : {}) });
+    closePop();
+    await load(true);
+  } catch (error) { showErr(error.message); }
+});
+$("pop").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-t]"); if (!b) return;
+  const act = b.dataset.t, t = popTask;
+  if (act === "cancel") { closePop(); return; }
+  if (act === "back") { sendingBack = t.id; openThread(t, true); $("tnote").focus(); return; }
+  if (act === "cancel-back") { sendingBack = null; openThread(t, true); return; }
+  if (act === "prompt") {
+    try { await navigator.clipboard.writeText(promptOf(t)); b.textContent = "Copied"; setTimeout(() => { b.textContent = "Copy as prompt"; }, 1500); }
+    catch { window.prompt("Copy this:", promptOf(t)); }
+    return;
+  }
+  try {
+    if (act === "approve") { await postTask(`/api/tasks/${encodeURIComponent(t.id)}`, { status: "approved" }); closePop(); }
+    if (act === "send-back") {
+      const note = $("tnote").value.trim();
+      if (!note) { showErr("Say what is still wrong, so the agent can fix it."); $("tnote").focus(); return; }
+      await postTask(`/api/tasks/${encodeURIComponent(t.id)}`, { status: "sent-back", note });
+      sendingBack = null;
+    }
+    await load(true);
+  } catch (error) { showErr(error.message); }
+});
+$("pop").addEventListener("input", () => { const err = $("terr"); if (err) err.hidden = true; });
+document.addEventListener("pointerdown", (e) => {
+  if ($("pop").hidden || $("pop").contains(e.target) || e.target.closest?.(".pin") || (commenting && e.target.closest?.(".frame"))) return;
+  closePop();
+});
 
 /* Connect: one row for each coding agent, with the action that adds Atlas to it, or its status once it has connected. */
 const ASK = "Set up Atlas for this app.";
@@ -731,6 +1074,7 @@ function fillConnect() {
   if (focused) [...panel.querySelectorAll("[aria-label]")].find((el) => el.getAttribute("aria-label") === focused)?.focus();
 }
 function toggleConnect(open) {
+  if (open) closePop();
   const panel = $("connect"), btn = $("connectBtn");
   panel.hidden = !open; btn.setAttribute("aria-expanded", String(open));
   if (open) panel.querySelector("button, a")?.focus(); else btn.focus();
@@ -753,9 +1097,10 @@ $("connect").addEventListener("click", async (e) => {
 });
 document.addEventListener("pointerdown", (e) => { if (!$("connect").hidden && !$("connect").contains(e.target) && e.target !== $("connectBtn")) toggleConnect(false); });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") { if (!$("connect").hidden) { toggleConnect(false); return; } if (comparing) { setCompare(null); return; } if (selected) { deselect(); return; } }
+  if (e.key === "Escape") { if (!$("connect").hidden) { toggleConnect(false); return; } if (!$("pop").hidden) { closePop(); return; } if (commenting) { setCommenting(false); return; } if (comparing) { setCompare(null); return; } if (selected) { deselect(); return; } }
   if (e.target.matches("input, textarea, select, [role=listbox]")) return;
   if (e.key === "0") fitAll();
+  else if (e.key === "c" || e.key === "C") setCommenting(!commenting);
   else if (e.key === "+" || e.key === "=") zoomAt(1.25, innerWidth / 2, innerHeight / 2, true);
   else if (e.key === "-") zoomAt(0.8, innerWidth / 2, innerHeight / 2, true);
 });
@@ -769,13 +1114,17 @@ async function load(keepView) {
   const first = !data;
   data = next;
   if (first && !flows().length) setMode("pages");
-  fillWidths(); fillMenus(); fillFreshness(); fillConnect();
+  fillWidths(); fillFreshness(); fillConnect();
   render(keepView && !first);
 }
 async function start() {
   ICONS = await (await fetch("/icons.json")).json();
   $("connectBtn").insertAdjacentHTML("afterbegin", icon("plug-circle-linear"));
-  menu($("pickSel")); menu($("areaSel"));
+  $("commentBtn").innerHTML = `${icon("chat-round-line-linear")}Comment`;
+  $("sideBtn").innerHTML = icon("panel-left-linear");
+  let saved = null;
+  try { saved = localStorage.getItem("atlas.side"); } catch { saved = null; }
+  setSide(saved ? saved === "open" : innerWidth >= 1024, false);
   await load(false);
   const events = new EventSource("/api/events");
   events.addEventListener("update", () => { load(true).catch(showError); });

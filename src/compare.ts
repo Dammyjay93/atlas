@@ -399,13 +399,28 @@ export function compareState(root: string, id: string, branchCommit?: string): S
   };
 }
 
-/** A part of a capture as a PNG at the capture's own pixel density, for an agent to look at. `box` is in CSS pixels. */
-export function cropPicture(root: string, entry: Entry, cssWidth: number, box: { x: number; y: number; w: number; h: number }): Buffer {
+/**
+ * A part of a capture as a PNG at the capture's own pixel density, for an agent to look at. `box` is in CSS pixels.
+ * `mark`, also in CSS pixels on the whole picture, is drawn as a 2-pixel indigo outline, such as the box a person marked.
+ */
+export function cropPicture(root: string, entry: Entry, cssWidth: number, box: Box, mark?: Box): Buffer {
   const png = PNG.sync.read(readFileSync(join(root, entry.png)));
   const k = Math.max(1, Math.round(png.width / cssWidth));
   const x = Math.max(0, Math.floor(box.x * k)), y = Math.max(0, Math.floor(box.y * k));
   const w = Math.max(1, Math.min(png.width - x, Math.ceil(box.w * k))), h = Math.max(1, Math.min(png.height - y, Math.ceil(box.h * k)));
   const out = new PNG({ width: w, height: h });
   PNG.bitblt(png, out, x, y, w, h, 0, 0);
+  if (mark) {
+    const x0 = mark.x * k - x, y0 = mark.y * k - y, x1 = (mark.x + mark.w) * k - x, y1 = (mark.y + mark.h) * k - y;
+    const paint = (px: number, py: number) => {
+      if (px < 0 || py < 0 || px >= w || py >= h) return;
+      const i = (py * w + px) * 4;
+      out.data[i] = 79; out.data[i + 1] = 70; out.data[i + 2] = 229; out.data[i + 3] = 255;
+    };
+    for (let t = 0; t < 2 * k; t++) {
+      for (let px = x0 - t; px <= x1 + t; px++) { paint(px, y0 - t); paint(px, y1 + t); }
+      for (let py = y0 - t; py <= y1 + t; py++) { paint(x0 - t, py); paint(x1 + t, py); }
+    }
+  }
   return PNG.sync.write(out);
 }

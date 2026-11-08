@@ -1,12 +1,14 @@
 import { EventEmitter } from "node:events";
 import { existsSync, readFileSync, statSync, watch } from "node:fs";
-import { createServer as createHttpServer, type ServerResponse, type Server } from "node:http";
+import { createServer as createHttpServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createServer, type Activity } from "./mcp.js";
+import { z } from "zod";
 import { AtlasError } from "./project.js";
+import { createTask, CreateSchema, updateTask } from "./tasks.js";
 import { viewerData } from "./viewer-data.js";
 
 export const DEFAULT_PORT = 4317;
@@ -33,6 +35,7 @@ export interface Running {
  * - `/api/atlas`: what the viewer draws, read fresh on each request;
  * - `/api/events`: a live stream that says when recipes or captures change, and what agents are doing;
  * - `/store/…`: the captured pictures and snapshots;
+ * - `POST /api/tasks` and `POST /api/tasks/<id>`: the person makes a task, or approves it or sends it back, from the viewer;
  * - `/mcp`: the MCP endpoint over streamable HTTP. Each request gets its own MCP server and transport (stateless mode).
  * Only localhost host names and origins are accepted, which blocks DNS rebinding from web pages.
  */
@@ -85,6 +88,26 @@ export function serve(root: string, port: number = DEFAULT_PORT): Promise<Runnin
       }
       return;
     }
+    if (path === "/api/tasks" || path.startsWith("/api/tasks/")) {
+      // Only the viewer's own page may write: browsers send Origin with every POST, and a page elsewhere cannot fake it.
+      if (req.method !== "POST" || !hosts.map((h) => `http://${h}`).includes(req.headers.origin ?? "") || !(req.headers["content-type"] ?? "").startsWith("application/json")) {
+        return send(res, 403, "application/json", JSON.stringify({ error: "Tasks change only from the Atlas viewer." }));
+      }
+      try {
+        const body = JSON.parse(await readBody(req)) as unknown;
+        const task = path === "/api/tasks"
+          ? createTask(root, CreateSchema.parse(body))
+          : (() => {
+              const { status, note } = ReviewSchema.parse(body);
+              return updateTask(root, path.slice("/api/tasks/".length), "person", status, note);
+            })();
+        return send(res, 200, "application/json", JSON.stringify(task));
+      } catch (error) {
+        const message = error instanceof z.ZodError ? (error.issues[0]?.message ?? "The request is not valid.") : error instanceof AtlasError || error instanceof SyntaxError ? error.message : null;
+        if (message === null) throw error;
+        return send(res, 400, "application/json", JSON.stringify({ error: message }));
+      }
+    }
     if (req.method !== "GET") return send(res, 405, "text/plain; charset=utf-8", "Use GET.\n");
     if (path === "/") return send(res, 200, "text/html; charset=utf-8", readFileSync(VIEWER, "utf8"));
     if (path === "/icons.json") return send(res, 200, "application/json", readFileSync(ICONS, "utf8"));
@@ -129,6 +152,24 @@ export function serve(root: string, port: number = DEFAULT_PORT): Promise<Runnin
       const actual = (server.address() as AddressInfo).port;
       done({ server, port: actual, url: `http://localhost:${actual}/mcp`, viewer: `http://localhost:${actual}/` });
     });
+  });
+}
+
+const ReviewSchema = z.strictObject({ status: z.enum(["approved", "sent-back"]), note: z.string().max(4000).optional() });
+
+/** A request's body, refused past 64 KB, which no task needs. */
+function readBody(req: IncomingMessage): Promise<string> {
+  return new Promise((done, fail) => {
+    let body = "";
+    req.on("data", (chunk: Buffer) => {
+      body += chunk.toString();
+      if (body.length > 65_536) {
+        fail(new AtlasError("The request is too large."));
+        req.destroy();
+      }
+    });
+    req.on("end", () => done(body));
+    req.on("error", fail);
   });
 }
 

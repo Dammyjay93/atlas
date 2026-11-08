@@ -7,6 +7,7 @@ import { overview } from "./overview.js";
 import { AtlasError, readConfig } from "./project.js";
 import type { Agent } from "./serve.js";
 import { readManifest, type Manifest } from "./store.js";
+import { beforeOf, readTasks } from "./tasks.js";
 
 /** The size of a PNG in pixels, read from its header. */
 function pngSize(file: string): { width: number; height: number } | null {
@@ -60,12 +61,13 @@ export function viewerData(root: string, port: number, agents: Agent[] = []) {
     const scale = size ? size.width / Number(width) : 2;
     return { png: "/" + png.replace(/^\.atlas\//, ""), height: size ? Math.round(size.height / scale) : Number(width) >= 768 ? 900 : 844 };
   };
-  type Shot = ReturnType<typeof picture> & { landedOn?: string; uncommitted: boolean; capturedAt: string; live?: ReturnType<typeof picture>; compare?: Comparison };
+  type Shot = ReturnType<typeof picture> & { layout?: string; landedOn?: string; uncommitted: boolean; capturedAt: string; live?: ReturnType<typeof picture>; compare?: Comparison };
   const shots: Record<string, Record<string, Shot>> = {};
   for (const [state, byWidth] of Object.entries(manifest?.states ?? {})) {
     for (const [width, entry] of Object.entries(byWidth)) {
       if (!existsSync(join(root, entry.png))) continue;
-      const shot: Shot = { ...picture(entry.png, width), ...(entry.landedOn ? { landedOn: entry.landedOn } : {}), uncommitted: entry.uncommitted, capturedAt: entry.capturedAt };
+      const layout = entry.layout && existsSync(join(root, entry.layout)) ? { layout: "/" + entry.layout.replace(/^\.atlas\//, "") } : {};
+      const shot: Shot = { ...picture(entry.png, width), ...layout, ...(entry.landedOn ? { landedOn: entry.landedOn } : {}), uncommitted: entry.uncommitted, capturedAt: entry.capturedAt };
       if (liveManifest) {
         const live = liveManifest.states[state]?.[width];
         const usable = live && existsSync(join(root, live.png)) ? live : undefined;
@@ -91,6 +93,14 @@ export function viewerData(root: string, port: number, agents: Agent[] = []) {
     states: view.states,
     invalid: view.invalid,
     shots,
+    tasks: readTasks(root).tasks.map((t) => {
+      const before = beforeOf(root, t);
+      return {
+        ...t,
+        before: before && existsSync(join(root, before.png)) ? "/" + before.png.replace(/^\.atlas\//, "") : null,
+        after: t.after && existsSync(join(root, t.after.png)) ? { ...t.after, png: "/" + t.after.png.replace(/^\.atlas\//, "") } : null
+      };
+    }),
     connect: connectInfo(`http://localhost:${port}/mcp`),
     agents
   };

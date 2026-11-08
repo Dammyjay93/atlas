@@ -4,7 +4,7 @@ See every screen of your web app as the code renders it, compare it with live, a
 
 Atlas is for people who build by prompting coding agents. Agents build many screens and flows quickly, and clicking through all of them to check the result is slow. Atlas puts every screen in one place, shows what differs from live, and turns your marks into tasks that agents pick up.
 
-> **Status:** early. Atlas can set up a project, serve its MCP tools on your computer, connect your coding agent in one step, teach the agent how to write state recipes, and capture each state as a picture and an HTML snapshot. The viewer shows every captured screen and updates while your agent works. Atlas compares each screen with live, outlines what changed and names the elements in each change. Tasks come next. The [build plan](#build-plan) lists the steps.
+> **Status:** early. Atlas can set up a project, serve its MCP tools on your computer, connect your coding agent in one step, teach the agent how to write state recipes, and capture each state as a picture and an HTML snapshot. The viewer shows every captured screen and updates while your agent works. Atlas compares each screen with live, outlines what changed and names the elements in each change. You mark what should change on a screen, and your agent works through it as a task for you to approve. The [build plan](#build-plan) lists the steps.
 
 ## How it works
 
@@ -63,6 +63,7 @@ For clients that start MCP servers themselves, `atlas mcp` serves the same tools
 | `atlas connect` | Shows how to connect each coding agent. `--write <claude\|codex\|cursor>` adds Atlas to that agent |
 | `atlas states` | Lists state recipes, recipes that need repair, and the live and branch commits. Add `--json` for structured output |
 | `atlas capture <state> --base-url <url>` | Captures one state at the current commit. `--cookie name=value` passes a test session; `--width` overrides the widths; `--live` files the capture under live's commit, for an app started from a copy of the project at live |
+| `atlas tasks` | Lists the changes you asked for. `--status` picks one status; add `--json` for structured output |
 | `atlas compare <state>` | Compares a state's captures at the current commit with its captures at live. Add `--json` for structured output |
 | `atlas mcp` | Serves the MCP tools over stdio |
 
@@ -73,6 +74,8 @@ For clients that start MCP servers themselves, `atlas mcp` serves the same tools
 | `atlas_guide` | Explains how Atlas works and how to write state recipes. Agents call it once before their first Atlas task |
 | `atlas_capture` | Captures one state at the current commit: a picture and an HTML snapshot for each width, saved in `.atlas/store/<commit>/<state>/`. Returns a picture of each width for the agent to check, and the status against live. `live: true` files the capture under live's commit |
 | `atlas_compare` | Compares a state with live. Returns each width's status, each element that was added, removed, moved or looks different, with its exact box, and pictures of each area at live and at the current commit |
+| `atlas_tasks` | Lists the changes the person asked for, each with their words, the marked box, the element under it, its history and a picture with the box drawn on it. `status: approved` lists decisions to build from |
+| `atlas_task_update` | Sets a task to `in-progress`, or to `ready-for-review` with a note once the agent has captured the state again. Atlas attaches that capture as the after picture |
 | `atlas_states` | Lists state recipes, recipes that need repair and why, and the live and branch commits resolved from git |
 
 ## State recipes
@@ -105,6 +108,12 @@ Atlas compares code with code. Your agent checks out live's commit in a second c
 - Each width gets a status: `same`, `changed`, `new` (no live capture) or `missing` (not captured at the current commit).
 
 In the viewer, a changed screen says **Changed from live** and has each changed area outlined. Select it and choose **Compare with live** to drag between live and the current commit.
+
+## Tasks
+
+In the viewer, select a screen and choose **Ask for a change**. Drag on the screen to mark a part, write what should change, and choose **Send to agent**. Atlas saves the request in `.atlas/tasks/<id>.md`, with the box, the element under it and the commit you marked. Commit these files, so every agent and person sees the same tasks and their history.
+
+A task moves from `open` to `in-progress` to `ready-for-review`, which the agent sets. You then approve it or send it back with a note, and a task you send back goes to the agent again. When the agent marks a task ready, Atlas attaches its new capture, and the viewer shows before and after side by side. **Copy as prompt** gives the request as text for an agent without MCP.
 
 ## Settings
 

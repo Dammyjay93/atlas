@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { capture } from "./capture.js";
 import { compareState } from "./compare.js";
+import { readTasks, STATUSES } from "./tasks.js";
 import { CLIENTS, connectInfo, writeClient, type Client } from "./connect.js";
 import { init } from "./init.js";
 import { serveStdio } from "./mcp.js";
@@ -24,6 +25,8 @@ Usage:
   atlas states [--json]         List state recipes and the live and branch commits
   atlas capture <state> --base-url <url> [--cookie name=value]... [--width <n>]... [--live]
                                 Capture one state at the current commit, or at live with --live
+  atlas tasks [--status <s>] [--json]
+                                List the changes the person asked for: ${STATUSES.join(", ")}
   atlas compare <state> [--json] Compare a state's captures at the current commit with its captures at live
   atlas mcp                     Serve MCP over stdio, for clients that start the server themselves
 
@@ -67,6 +70,7 @@ async function main(argv: string[]): Promise<number> {
       width: { type: "string", multiple: true },
       json: { type: "boolean", default: false },
       live: { type: "boolean", default: false },
+      status: { type: "string" },
       "no-open": { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
       version: { type: "boolean", short: "v", default: false }
@@ -158,6 +162,19 @@ async function main(argv: string[]): Promise<number> {
         out(`  ${w.width}: ${w.entry.png}${w.changed ? "" : " (same as before)"}${w.entry.landedOn ? `, landed on ${w.entry.landedOn}` : ""}${status}`);
       }
       return 0;
+    }
+    case "tasks": {
+      if (values.status && !(STATUSES as readonly string[]).includes(values.status)) throw new AtlasError(`--status takes one of: ${STATUSES.join(", ")}.`);
+      const { tasks, invalid } = readTasks(findRoot(here));
+      const chosen = tasks.filter((t) => !values.status || t.status === values.status);
+      if (values.json) return out(JSON.stringify({ tasks: chosen, invalid }, null, 2)), 0;
+      out(`${chosen.length} ${chosen.length === 1 ? "task" : "tasks"}`);
+      for (const t of chosen) {
+        out(`  ${t.id}  ${t.status}  ${t.state} at ${t.width}px${t.element ? `, on ${t.element.tag} "${t.element.text}"` : ""}`);
+        out(`    ${t.words.split("\n").join("\n    ")}`);
+      }
+      for (const i of invalid) out(`  ${i.file} cannot be read: ${i.problem}`);
+      return invalid.length ? 1 : 0;
     }
     case "compare": {
       const id = positionals[1];

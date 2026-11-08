@@ -6,6 +6,7 @@ export const INSTRUCTIONS = `Atlas keeps a picture of every screen of this proje
 
 Call atlas_guide once before your first Atlas task in a session.
 Call atlas_states to see the project's state recipes, the live and branch commits, and any recipe that needs repair.
+Call atlas_tasks to see the changes the person asked for, and work through them with atlas_task_update.
 When you build or change a screen, write or update a recipe for each of its states in .atlas/states/<id>.json, then capture each state with atlas_capture.
 To see what differs from live, capture the same states at live with atlas_capture and live: true, then call atlas_compare.
 Repair every recipe that atlas_states reports as invalid.`;
@@ -26,8 +27,9 @@ Your part:
 3. Capture each of those states with atlas_capture, and look at the pictures it returns.
 4. When a recipe stops working because the app changed, repair it in the same change.
 5. To show what differs from live, capture the same states at live and call atlas_compare. See the compare topic.
+6. The person marks what should change on a screen. Each mark is a task: call atlas_tasks and work through them. See the tasks topic.
 
-Topics: workflow, recipes, capture, compare.`,
+Topics: workflow, recipes, capture, compare, tasks.`,
 
   recipes: `How to write a state recipe
 
@@ -88,7 +90,19 @@ Live is the code at the ref in .atlas/config.json (liveRef), such as origin/main
 
 Statuses: same, changed, new (no live capture) and missing (not captured at this commit).
 Content that only moved up or down is not a change. Atlas records every visible element at capture, so each change names a real element at its real place. When no element accounts for changed pixels, such as a drawn decoration, the area has no elements and outlines the pixels.
-When live moves to a new commit, capture live again.`
+When live moves to a new commit, capture live again.`,
+
+  tasks: `How to work through tasks
+
+The person marks a part of a screen in the Atlas viewer and writes what should change. Each mark is a task in .atlas/tasks/<id>.md, committed with the project.
+
+1. Call atlas_tasks. Each task has the person's words, the state and width, the box they marked, the element under it, and a picture with their box drawn on it.
+2. Call atlas_task_update with status in-progress when you start a task, so the person sees it.
+3. Change the code. Then capture the task's state with atlas_capture, and look at the picture.
+4. Call atlas_task_update with status ready-for-review and a note on what you changed. Atlas attaches your capture as the after picture.
+5. The person approves the task or sends it back with a note. A sent-back task appears again in atlas_tasks: read the last note in its history and fix what it says.
+
+Approved tasks are decisions: call atlas_tasks with status approved before you build from a screen the person chose.`
 } as const;
 
 export type Topic = keyof typeof TOPICS;

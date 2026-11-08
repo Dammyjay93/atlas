@@ -1,6 +1,6 @@
 {
   "name": "useflowmap",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "See every screen of your web app as the code renders it, compare it with live, and send changes back to your coding agents.",
   "license": "MIT",
   "repository": {

@@ -69,6 +69,12 @@ describe("the viewer's data", () => {
     expect(JSON.parse((await get(running.port, "/api/flowmap")).body).shown.behind).toBe(1);
   });
 
+  it("exits when its port is in use, instead of staying alive without serving", () => {
+    const run = spawnSync("node", [CLI, "serve", "--port", String(running.port)], { cwd: project, encoding: "utf8", timeout: 10_000 });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain(`Port ${running.port} is in use`);
+  });
+
   it("serves only files inside the capture store", async () => {
     expect((await get(running.port, "/store/%2e%2e/config.json")).status).toBe(404);
   });

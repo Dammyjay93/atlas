@@ -147,9 +147,12 @@ export function serve(root: string, port: number = DEFAULT_PORT): Promise<Runnin
   server.on("close", () => watcher?.close());
 
   return new Promise((done, fail) => {
-    server.once("error", (error: NodeJS.ErrnoException) =>
-      fail(error.code === "EADDRINUSE" ? new FlowmapError(`Port ${port} is in use. Stop the other program, or start Flowmap with --port and another number.`) : error)
-    );
+    server.once("error", (error: NodeJS.ErrnoException) => {
+      // The server never listened, so its close event will not come: stop watching here, or the process stays alive.
+      clearTimeout(pending);
+      watcher?.close();
+      fail(error.code === "EADDRINUSE" ? new FlowmapError(`Port ${port} is in use. Stop the other program, or start Flowmap with --port and another number.`) : error);
+    });
     server.listen(port, "127.0.0.1", () => {
       const actual = (server.address() as AddressInfo).port;
       done({ server, port: actual, url: `http://localhost:${actual}/mcp`, viewer: `http://localhost:${actual}/` });

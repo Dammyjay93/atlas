@@ -5,9 +5,11 @@ import { capture } from "./capture.js";
 import { check } from "./check.js";
 import { compareState, cropPicture, type StateComparison } from "./compare.js";
 import { beforeOf, readTasks, STATUSES, updateTask, type Task } from "./tasks.js";
+import { markBuilding, VariantSchema } from "./variants.js";
+import { readStates } from "./states.js";
 import { INSTRUCTIONS, TOPICS, type Topic } from "./guide.js";
 import { overview } from "./overview.js";
-import { AtlasError } from "./project.js";
+import { AtlasError, resolveRef } from "./project.js";
 import { VERSION } from "./version.js";
 
 const text = (body: string) => ({ content: [{ type: "text" as const, text: body }] });
@@ -36,6 +38,8 @@ const forAgent = (t: Task) => ({
   request: t.words,
   ...(t.area ? { area: t.area } : { area: "the whole screen" }),
   ...(t.element ? { element: t.element } : {}),
+  ...(t.choice ? { choice: t.choice } : {}),
+  ...(t.variant ? { version: t.variant } : {}),
   markedAt: t.commit,
   ...(t.after ? { after: t.after } : {}),
   history: t.log
@@ -71,7 +75,7 @@ export function createServer(root: string, onActivity: (activity: Activity) => v
     {
       title: "How to use Atlas",
       description: "Explains how Atlas works and how to write state recipes. Call it once before your first Atlas task in a session.",
-      inputSchema: { topic: z.enum(Object.keys(TOPICS) as [Topic, ...Topic[]]).optional().describe("workflow (default), recipes, capture, compare or tasks") },
+      inputSchema: { topic: z.enum(Object.keys(TOPICS) as [Topic, ...Topic[]]).optional().describe("workflow (default), recipes, capture, compare, tasks or variations") },
       annotations: { readOnlyHint: true }
     },
     async ({ topic }) => text(TOPICS[topic ?? "workflow"])
@@ -107,7 +111,8 @@ export function createServer(root: string, onActivity: (activity: Activity) => v
           .optional()
           .describe("The test session cookies, for states that need sign-in"),
         widths: z.array(z.number().int().positive()).optional().describe("Screen widths, if they differ from the recipe and the settings"),
-        live: z.boolean().optional().describe("True when baseUrl serves the live ref's code, from a second copy of the project checked out at live. The capture is filed under live's commit")
+        live: z.boolean().optional().describe("True when baseUrl serves the live ref's code, from a second copy of the project checked out at live. The capture is filed under live's commit"),
+        variant: VariantSchema.optional().describe("When you built several versions of a screen for the person to choose from: the set (such as job-card), this version's name (such as a), a one-sentence note on what makes it different, and the route that shows it (such as /checkout?version=b). Build the versions side by side in this working copy, behind a switch.")
       }
     },
     async (input) => {
@@ -115,7 +120,7 @@ export function createServer(root: string, onActivity: (activity: Activity) => v
       try {
         const result = await capture(root, input);
         onActivity({ tool: "atlas_capture", state: input.state, phase: "done" });
-        const versus = input.live ? null : versusLive(root, input.state);
+        const versus = input.live || input.variant ? null : versusLive(root, input.state);
         const summary = {
           state: result.state,
           commit: result.commit,
@@ -125,6 +130,7 @@ export function createServer(root: string, onActivity: (activity: Activity) => v
             const cmp = versus?.live.captured ? versus.widths.find((v) => v.width === w.width) : undefined;
             return { width: w.width, changed: w.changed, status: w.entry.status, ...(w.entry.landedOn ? { landedOn: w.entry.landedOn } : {}), ...(cmp ? { againstLive: cmp.status } : {}), png: w.entry.png, html: w.entry.html };
           }),
+          ...(input.variant ? { next: `Filed as version ${input.variant.name} of "${input.variant.set}". When every version is captured, tell the person to choose one in Atlas.` } : {}),
           ...(versus?.widths.some((w) => w.status === "changed") ? { next: "This state differs from live. Call atlas_compare to see what changed." } : {})
         };
         return {
@@ -138,6 +144,26 @@ export function createServer(root: string, onActivity: (activity: Activity) => v
         if (error instanceof AtlasError) return { isError: true, ...text(error.message) };
         throw error;
       }
+    }
+  );
+  server.registerTool(
+    "atlas_version_start",
+    {
+      title: "Start a version",
+      description:
+        "Call this when you start building a version of a screen for the person to choose from, before you change any code for it. Atlas shows the version's frame as being built until you capture it with atlas_capture and the same variant.",
+      inputSchema: {
+        state: z.string().describe("The recipe id of the screen, from atlas_states"),
+        variant: VariantSchema.describe("The same set, name, note and route you will capture the version with")
+      }
+    },
+    async ({ state, variant }) => {
+      if (!readStates(root).states.some((s) => s.id === state)) return { isError: true, ...text(`No valid recipe with id "${state}". Call atlas_states to see the recipes.`) };
+      const commit = resolveRef(root, "HEAD");
+      if (!commit) return { isError: true, ...text("The project has no commit yet. Commit once, then start the version.") };
+      markBuilding(root, variant, commit, state, true);
+      onActivity({ tool: "atlas_version_start", state, phase: "done" });
+      return text(`Atlas shows version ${variant.name} of "${variant.set}" as being built. Build it, then capture ${state} with atlas_capture and this variant.`);
     }
   );
   server.registerTool(

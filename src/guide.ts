@@ -10,6 +10,7 @@ Call atlas_tasks to see the changes the person asked for, and work through them 
 When you build or change a screen, write or update a recipe for each of its states in .atlas/states/<id>.json, then capture each state with atlas_capture.
 To see what differs from live, capture the same states at live with atlas_capture and live: true, then call atlas_compare.
 Before you say a change is done, call atlas_check and look at every screen it reports as changed. Fix any change you did not mean to make, or tell the person why it is expected.
+When the person asks for several versions of a screen, build them side by side behind a switch and capture each with atlas_capture and variant. See atlas_guide topic variations.
 Repair every recipe that atlas_states reports as invalid.`;
 
 export const TOPICS = {
@@ -31,7 +32,9 @@ Your part:
 6. Before you say a change is done, call atlas_check. It captures every state and shows every screen your change touched, including ones you did not mean to change.
 7. The person marks what should change on a screen. Each mark is a task: call atlas_tasks and work through them. See the tasks topic.
 
-Topics: workflow, recipes, capture, compare, tasks.`,
+8. When the person asks for several versions of a screen, build them so they can choose in Atlas. See the variations topic.
+
+Topics: workflow, recipes, capture, compare, tasks, variations.`,
 
   recipes: `How to write a state recipe
 
@@ -105,7 +108,17 @@ The person marks a part of a screen in the Atlas viewer and writes what should c
 5. Call atlas_task_update with status ready-for-review and a note on what you changed. Atlas attaches your capture as the after picture.
 6. The person approves the task or sends it back with a note. A sent-back task appears again in atlas_tasks: read the last note in its history and fix what it says.
 
-Approved tasks are decisions: call atlas_tasks with status approved before you build from a screen the person chose.`
+Approved tasks are decisions: call atlas_tasks with status approved before you build from a screen the person chose.`,
+
+  variations: `How to build versions of a screen for the person to choose from
+
+1. Agree with the person how many versions, and what should differ between them.
+2. Build every version side by side in this working copy, behind a switch the address can set, such as ?version=b. Keep the current screen as the default, so nothing else changes.
+3. Before you change code for a version, call atlas_version_start with its state and variant. The person sees its frame being built.
+4. Capture each version with atlas_capture and variant: { set, name, note, route }. The set names the screen (such as job-card), name names the version (such as a, b, c), note says in one sentence what makes it different, and route is the address that shows it (such as /board?tab=fit&version=b). Every version of a set should capture the same states.
+5. Tell the person the versions are ready in Atlas. They appear side by side, and the person can comment on any version before choosing.
+6. A comment on a version arrives as a task with a version: change that version only, capture it again with the same variant, and mark the task ready.
+7. The person's choice arrives as a task with a choice: the version to keep and the others. Make the kept version the screen's only version: remove the other versions and the switch from the code, capture the screens again, call atlas_check, and mark the task ready for review.`
 } as const;
 
 export type Topic = keyof typeof TOPICS;

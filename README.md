@@ -65,6 +65,7 @@ For clients that start MCP servers themselves, `atlas mcp` serves the same tools
 | `atlas capture <state> --base-url <url>` | Captures one state at the current commit. `--cookie name=value` passes a test session; `--width` overrides the widths; `--live` files the capture under live's commit, for an app started from a copy of the project at live |
 | `atlas check --base-url <url>` | Captures every state at your current code and lists the screens that changed since before your change. `--cookie name=value` passes a test session |
 | `atlas tasks` | Lists the changes you asked for. `--status` picks one status; add `--json` for structured output |
+| `atlas capture <state> --base-url <url> --variant <set>/<name> --note <text> --route <path>` | Captures a version of a screen for the person to choose from, from the address that shows it, filed under its set |
 | `atlas compare <state>` | Compares a state's captures at the current commit with its captures at live. Add `--json` for structured output |
 | `atlas mcp` | Serves the MCP tools over stdio |
 
@@ -74,6 +75,8 @@ For clients that start MCP servers themselves, `atlas mcp` serves the same tools
 | --- | --- |
 | `atlas_guide` | Explains how Atlas works and how to write state recipes. Agents call it once before their first Atlas task |
 | `atlas_capture` | Captures one state at the current commit: a picture and an HTML snapshot for each width, saved in `.atlas/store/<commit>/<state>/`. Returns a picture of each width for the agent to check, and the status against live. `live: true` files the capture under live's commit |
+| `atlas_capture` with `variant` | Files a version of a screen under its set: `{ set, name, note, route }`, where `route` is the address that shows it, such as `/checkout?version=b`. The versions of a set appear side by side in the viewer |
+| `atlas_version_start` | Marks a version as being built, before the agent changes code for it. The viewer shows its frame as a moving mosaic of its name until the agent captures it, then the mosaic dissolves into the screen |
 | `atlas_compare` | Compares a state with live. Returns each width's status, each element that was added, removed, moved or looks different, with its exact box, and pictures of each area at live and at the current commit |
 | `atlas_check` | Before an agent says a change is done: captures every state and lists every screen the change touched, including ones it did not mean to change, with the changed elements and pictures before and now. It replaces no captures |
 | `atlas_tasks` | Lists the changes the person asked for, each with their words, the marked box, the element under it, its history and a picture with the box drawn on it. `status: approved` lists decisions to build from |
@@ -114,6 +117,10 @@ In the viewer, a changed screen says **Changed from live** and has each changed 
 ## Check before done
 
 Before your agent says a change is done, it calls `atlas_check`. Atlas captures every state at the agent's current code and compares each with its capture from before the change: this commit's captures while the change is uncommitted, or the newest earlier commit's once it is committed. The agent sees every screen the change touched, including screens it did not mean to change, and names what moved, appeared, disappeared or looks different. The check keeps its captures apart, so it never replaces a commit's captures.
+
+## Versions
+
+Ask your agent for several versions of a screen. It builds them side by side in your working copy, behind a switch the address sets, such as `?version=b`, and captures each with `variant: { set, name, note, route }`. One app runs; there are no extra branches. While the agent builds a version, its frame shows the version's name as a moving mosaic of dots, and the mosaic dissolves into the screen when the agent captures it. In the viewer, each set gets a section with its versions side by side. In comment mode you can comment on any version, for example "B, but with A's button", and the agent changes that version. Select the one you want and choose **Choose this version**: Atlas makes a task for the agent to keep it, remove the other versions and the switch, capture again and check, which you then approve like any task.
 
 ## Tasks
 

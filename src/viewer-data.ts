@@ -8,6 +8,7 @@ import { AtlasError, readConfig } from "./project.js";
 import type { Agent } from "./serve.js";
 import { readManifest, type Manifest } from "./store.js";
 import { beforeOf, readTasks } from "./tasks.js";
+import { readVariantSets } from "./variants.js";
 
 /** The size of a PNG in pixels, read from its header. */
 function pngSize(file: string): { width: number; height: number } | null {
@@ -93,6 +94,14 @@ export function viewerData(root: string, port: number, agents: Agent[] = []) {
     states: view.states,
     invalid: view.invalid,
     shots,
+    // Versions to choose from: each set's options, with each capture's address and height at each width.
+    variants: readVariantSets(root).map((set) => ({
+      set: set.set,
+      options: set.options.map((o) => ({
+        name: o.name, note: o.note, commit: o.commit, ...(o.building ? { building: o.building } : {}),
+        shots: Object.fromEntries(Object.entries(o.shots).map(([state, byWidth]) => [state, Object.fromEntries(Object.entries(byWidth).filter(([, f]) => existsSync(join(root, f.png))).map(([w, f]) => [w, { ...picture(f.png, w), layout: "/" + f.layout.replace(/^\.atlas\//, "") }]))]))
+      }))
+    })),
     tasks: readTasks(root).tasks.map((t) => {
       const before = beforeOf(root, t);
       return {

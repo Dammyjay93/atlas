@@ -7,6 +7,7 @@ import { capture } from "./capture.js";
 import { check } from "./check.js";
 import { compareState } from "./compare.js";
 import { readTasks, STATUSES } from "./tasks.js";
+import { VariantSchema } from "./variants.js";
 import { CLIENTS, connectInfo, writeClient, type Client } from "./connect.js";
 import { init } from "./init.js";
 import { serveStdio } from "./mcp.js";
@@ -25,7 +26,8 @@ Usage:
   atlas connect [--write <app>] Show how to connect a coding agent, or add Atlas to one: ${CLIENTS.join(", ")}
   atlas states [--json]         List state recipes and the live and branch commits
   atlas capture <state> --base-url <url> [--cookie name=value]... [--width <n>]... [--live]
-                                Capture one state at the current commit, or at live with --live
+                                [--variant <set>/<name> --note <text> [--route <path>]]
+                                Capture one state at the current commit, at live with --live, or as a version to choose from
   atlas check --base-url <url> [--cookie name=value]... [--json]
                                 Capture every state and list the screens that changed since before your change
   atlas tasks [--status <s>] [--json]
@@ -74,6 +76,9 @@ async function main(argv: string[]): Promise<number> {
       json: { type: "boolean", default: false },
       live: { type: "boolean", default: false },
       status: { type: "string" },
+      variant: { type: "string" },
+      note: { type: "string" },
+      route: { type: "string" },
       "no-open": { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
       version: { type: "boolean", short: "v", default: false }
@@ -157,7 +162,14 @@ async function main(argv: string[]): Promise<number> {
         return { name: pair.slice(0, at), value: pair.slice(at + 1) };
       });
       const widths = values.width?.map((w) => portOf(w));
-      const result = await capture(findRoot(here), { state: id, baseUrl: values["base-url"], cookies, live: values.live, ...(widths ? { widths } : {}) });
+      let variant;
+      if (values.variant) {
+        const [set, name] = values.variant.split("/");
+        const parsed = VariantSchema.safeParse({ set, name, note: values.note, ...(values.route ? { route: values.route } : {}) });
+        if (!parsed.success) throw new AtlasError(`--variant takes <set>/<name> with --note, and --route for the address that shows it: ${parsed.error.issues.map((i) => `${i.path.join(".")} ${i.message}`).join("; ")}`);
+        variant = parsed.data;
+      }
+      const result = await capture(findRoot(here), { state: id, baseUrl: values["base-url"], cookies, live: values.live, ...(variant ? { variant } : {}), ...(widths ? { widths } : {}) });
       if (values.json) return out(JSON.stringify({ ...result, widths: result.widths.map(({ preview, ...w }) => w) }, null, 2)), 0;
       out(`Captured ${result.state} at ${values.live ? "live, " : ""}${result.commit}${result.uncommitted ? " with uncommitted changes" : ""}`);
       for (const w of result.widths) {

@@ -40,6 +40,7 @@ svg { display: block; }
 /* Screens sit straight on the canvas with a hairline, kept one screen size at every zoom. */
 .frame { position: absolute; padding: 0; border: 0; background: var(--ground); box-shadow: 0 0 0 calc(1px * var(--inv)) var(--edge); overflow: hidden; }
 .frame img { display: block; width: 100%; height: auto; pointer-events: none; user-select: none; }
+.frame canvas.dither { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; pointer-events: none; }
 .frame.absent { background: transparent; box-shadow: none; outline: calc(1px * var(--inv)) dashed var(--absent); outline-offset: calc(-1px * var(--inv)); display: grid; place-content: center; gap: 16px; text-align: center; padding: 64px; }
 .frame.absent .t { font-size: 32px; font-weight: 600; color: var(--ink-2); }
 .frame.absent .w { font-size: 28px; line-height: 1.45; color: var(--ink-3); max-width: 760px; }
@@ -224,12 +225,27 @@ svg.links circle.on { stroke: var(--sel); }
 .st { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; background: var(--hover); color: var(--ink-2); font-size: .75rem; font-weight: 500; white-space: nowrap; flex: none; }
 .st.ready-for-review { background: color-mix(in srgb, var(--sel) 12%, transparent); color: var(--sel); }
 .st.sent-back { background: var(--warn-bg); color: var(--warn-ink); }
+.st.building { background: var(--hover); color: var(--ink-2); }
 .st.approved { background: color-mix(in srgb, var(--fresh) 14%, transparent); color: var(--fresh); }
 .thread .w { margin: 8px 0 0; font-size: .8125rem; line-height: 1.45; text-wrap: pretty; white-space: pre-wrap; overflow-wrap: anywhere; }
 .thread .note { margin: 6px 0 0; font-size: .75rem; line-height: 1.45; color: var(--ink-2); overflow-wrap: anywhere; }
 .crops { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
 .crop { position: relative; overflow: hidden; border-radius: 6px; box-shadow: 0 0 0 .5px var(--hairline); background: var(--ground); }
 .crop img { position: absolute; max-width: none; }
+button.crop { display: block; width: 100%; padding: 0; border: 0; cursor: zoom-in; }
+.expand { width: calc(100vw - 16px); max-width: none; height: calc(100dvh - 16px); max-height: none; margin: 8px; padding: 0; border: 0; border-radius: 12px; background: var(--ground); color: var(--ink); box-shadow: 0 0 0 1px var(--hairline); overflow: hidden; }
+.expand[open] { display: flex; flex-direction: column; }
+.expand::backdrop { background: rgba(0, 0, 0, .4); }
+.ex-bar { display: flex; align-items: center; gap: 12px; height: 48px; padding: 0 8px 0 16px; box-shadow: inset 0 -1px 0 var(--line); flex: none; }
+.ex-t { flex: 1; font-size: .8125rem; font-weight: 500; }
+.ex-close { height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--hover); color: var(--ink); font: inherit; font-size: .8125rem; font-weight: 500; cursor: pointer; }
+.ex-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; display: grid; grid-template-columns: repeat(2, minmax(0, var(--w))); justify-content: center; align-items: start; gap: 16px; padding: 16px; }
+.ex-col { display: grid; gap: 8px; min-width: 0; }
+.ex-col h3 { margin: 0; font-size: .75rem; font-weight: 500; color: var(--ink-3); }
+.ex-pic { position: relative; box-shadow: 0 0 0 .5px var(--hairline); border-radius: 6px; overflow: hidden; }
+.ex-pic img { display: block; width: 100%; height: auto; }
+.ex-pic i { position: absolute; border: 2px solid var(--sel); border-radius: 4px; pointer-events: none; }
+@media (max-width: 640px) { .ex-body { grid-template-columns: minmax(0, 1fr); } }
 .crop span { position: absolute; left: 4px; top: 4px; padding: 0 6px; border-radius: 999px; background: var(--ink); color: var(--ground); font-size: .6875rem; line-height: 16px; }
 .copyp { border: 0; background: none; padding: 0; color: var(--ink-3); font-size: .75rem; text-decoration: underline; text-underline-offset: 3px; }
 .bottom .zbtn[aria-pressed="true"] { background: var(--ink); color: var(--ground); }
@@ -289,6 +305,10 @@ svg.links circle.on { stroke: var(--sel); }
 </div>
 <section class="panel" id="connect" aria-labelledby="connectTitle" hidden></section>
 <div class="pop" id="pop" role="dialog" aria-label="Task" hidden></div>
+<dialog class="expand" id="expand" aria-label="Before and after">
+  <div class="ex-bar"><span class="ex-t">Before and after</span><button class="ex-close" type="button" id="expandClose">Close</button></div>
+  <div class="ex-body" id="expandBody"></div>
+</dialog>
 
 <nav class="float bottom" aria-label="View">
   <div class="seg mode" role="group" aria-label="Arrange by">
@@ -356,7 +376,124 @@ function screen(s, x, y) {
 const areasOf = (shot) => (shot.compare?.areas ?? []).flatMap((a) => (a.changes.length ? a.changes.filter((c) => c.box).map((c) => c.box) : [a]))
   .map((b) => `<i class="chg" aria-hidden="true" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px"></i>`).join("");
 /* Tasks still to finish on a screen, at the shown width; approved tasks are done. */
-const openTasks = (id) => (data.tasks ?? []).filter((t) => t.state === id && t.width === width && t.status !== "approved");
+/* The frame a task belongs on: the version it was marked on or chose, or else its screen. */
+const taskFrame = (t) => (t.variant ? `v:${t.variant.set}:${t.variant.name}:${t.state}` : t.choice ? `v:${t.choice.set}:${t.choice.name}:${t.state}` : t.state);
+/* A task on a box belongs to the width it was marked at; a task on the whole screen, such as a choice, shows at every width. */
+const openTasks = (id) => (data.tasks ?? []).filter((t) => taskFrame(t) === id && (!t.area || t.width === width) && t.status !== "approved");
+/* A frame's capture and what it shows: a screen, or a version of one ("v:set:name:state"). */
+function frameInfo(id) {
+  if (!id.startsWith("v:")) { const s = byId().get(id); return { shot: shotOf(id), name: s?.name ?? id, state: id, commit: data.shown?.commit }; }
+  const [, set, name, state] = id.split(":");
+  const option = (data.variants ?? []).find((v) => v.set === set)?.options.find((o) => o.name === name);
+  const label = name.length === 1 ? name.toUpperCase() : name;
+  return { shot: option?.shots[state]?.[String(width)], name: `Version ${label} of ${set}`, state, commit: option?.commit, variant: { set, name } };
+}
+/* Versions to choose from: one section for each set, the versions side by side, one row for each screen they cover. */
+const versionId = (set, name, state) => `v:${set}:${name}:${state}`;
+const chosenOf = (set) => (data.tasks ?? []).find((t) => t.choice?.set === set && t.status !== "sent-back");
+function drawVersions(main) {
+  const GAP = width >= 768 ? 160 : 120, BETWEEN = 1500;
+  let top = main.h ? main.h + BETWEEN : 0, maxX = main.w;
+  const building = new Set();
+  for (const v of data.variants ?? []) {
+    const states = [...new Set(v.options.flatMap((o) => [...Object.keys(o.shots), ...(o.building ? [o.building.state] : [])]))];
+    const isBuilding = (o, st) => o.building?.state === st;
+    const options = v.options.filter((o) => states.some((st) => o.shots[st]?.[String(width)] || isBuilding(o, st)));
+    if (!options.length) continue;
+    const counted = heading(top, `Versions: ${v.set}`);
+    const chosen = chosenOf(v.set);
+    for (const st of states) {
+      // A version still being built takes the height of the versions beside it, or a screen's height.
+      const known = Math.max(0, ...options.map((o) => o.shots[st]?.[String(width)]?.height ?? 0)) || (width >= 768 ? 900 : 844);
+      let rowH = 0;
+      options.forEach((o, i) => {
+        const shot = o.shots[st]?.[String(width)], making = isBuilding(o, st);
+        if (!shot && !making) return;
+        const id = versionId(v.set, o.name, st), x = i * (width + GAP), h = shot?.height ?? known;
+        const letter = o.name.length === 1 ? o.name.toUpperCase() : o.name;
+        const f = put("button", "frame", x, top, width, h, making ? `<canvas class="dither" aria-hidden="true"></canvas>` : `<img src="${esc(shot.png)}" alt="" decoding="async">`);
+        f.type = "button"; f.dataset.id = id;
+        if (making) { f.classList.add("building"); f.dataset.title = `Version ${letter}`; building.add(id); }
+        else if (wasBuilding.has(id)) arrive(f, `Version ${letter}`);
+        const label = `${letter} · ${o.note}`;
+        f.setAttribute("aria-label", `Version ${label}${making ? ", being built" : chosen?.choice?.name === o.name ? ", chosen" : ""}`);
+        const n = document.createElement("div");
+        n.className = "fname" + (selected === id ? " sel" : ""); n.dataset.id = id;
+        n.innerHTML = `<div class="row"><span class="who"><span class="n">${esc(label)}</span></span>${making ? `<span class="st building">Building</span>` : chosen?.choice?.name === o.name ? `<span class="st approved">Chosen</span>` : ""}</div>`;
+        names.appendChild(n);
+        labels.push({ n, x, y: top, w: width, h });
+        rowH = Math.max(rowH, h); maxX = Math.max(maxX, x + width);
+      });
+      top += rowH + GAP;
+    }
+    counted("", ["version", "versions"]);
+    top += BETWEEN - GAP;
+  }
+  wasBuilding = building;
+  if (building.size) dither();
+  return { w: maxX, h: Math.max(main.h, top - BETWEEN) };
+}
+
+/* A version being built: its title as a mosaic of dots, dithered over a slow wave, until its capture arrives. Then the mosaic
+   dissolves into the picture, top first. One loop draws every mosaic and stops when none is left. */
+let wasBuilding = new Set(), ditherLoop = 0;
+const CELL = 4, DOT = 3, BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+const stillMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+/* The title's shape on a grid of cells: 1 inside the letters, 0 outside. */
+function titleMask(text, cols, rows) {
+  const c = document.createElement("canvas"); c.width = cols; c.height = rows;
+  const g = c.getContext("2d");
+  g.font = `600 ${Math.round(rows * 0.5)}px ${getComputedStyle(document.body).fontFamily}`;
+  const size = Math.min(rows * 0.5, (rows * 0.5 * cols * 0.6) / Math.max(1, g.measureText(text).width));
+  g.font = `600 ${Math.round(size)}px ${getComputedStyle(document.body).fontFamily}`;
+  g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#000"; g.fillText(text, cols / 2, rows / 2);
+  const px = g.getImageData(0, 0, cols, rows).data, mask = new Float32Array(cols * rows);
+  for (let i = 0; i < mask.length; i++) mask[i] = px[i * 4 + 3] / 255;
+  return mask;
+}
+function paintMosaic(canvas, title, t, gone = -1) {
+  const frame = canvas.parentElement, cols = Math.max(1, Math.round(frame.offsetWidth / 12)), rows = Math.max(1, Math.round(frame.offsetHeight / 12));
+  if (canvas.width !== cols * CELL || canvas.height !== rows * CELL || canvas.dataset.title !== title) {
+    canvas.width = cols * CELL; canvas.height = rows * CELL; canvas.dataset.title = title; canvas.mask = titleMask(title, cols, rows);
+  }
+  const g = canvas.getContext("2d"), css = getComputedStyle(frame), ground = css.getPropertyValue("--ground"), ink = css.getPropertyValue("--ink");
+  g.clearRect(0, 0, canvas.width, canvas.height);
+  // While dissolving, the ground fades as one layer and each dot drops once the sweep, which starts at the top, passes it.
+  g.globalAlpha = gone >= 0 ? 1 - gone : 1; g.fillStyle = ground; g.fillRect(0, 0, canvas.width, canvas.height); g.globalAlpha = 1;
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+    const threshold = (BAYER[(y % 4) * 4 + (x % 4)] + 0.5) / 16;
+    if (gone >= 0 && gone * 1.5 - (y / rows) * 0.5 > threshold) continue;
+    const m = canvas.mask[y * cols + x];
+    const wave = 0.5 + 0.5 * Math.sin(x * 0.11 + y * 0.07 - t * 1.4);
+    const v = 0.04 + 0.14 * wave + m * (0.62 + 0.12 * Math.sin(t * 2 + x * 0.25));
+    if (v > threshold) { g.fillStyle = ink; g.globalAlpha = m > 0.5 ? 0.9 : 0.28; g.fillRect(x * CELL, y * CELL, DOT, DOT); g.globalAlpha = 1; }
+  }
+}
+function dither() {
+  if (ditherLoop) return;
+  const tick = (now) => {
+    const canvases = [...document.querySelectorAll(".frame.building canvas.dither")];
+    if (!canvases.length) { ditherLoop = 0; return; }
+    const t = stillMotion() ? 0 : now / 1000;
+    canvases.forEach((c) => paintMosaic(c, c.parentElement.dataset.title, t));
+    ditherLoop = stillMotion() ? 0 : requestAnimationFrame(tick);
+  };
+  ditherLoop = requestAnimationFrame(tick);
+}
+/* The capture arrived: the last mosaic sits over the picture and dissolves into it over 0.9 s. */
+function arrive(frame, title) {
+  if (stillMotion()) return;
+  const c = document.createElement("canvas"); c.className = "dither"; c.setAttribute("aria-hidden", "true");
+  frame.appendChild(c);
+  const start = performance.now();
+  const step = (now) => {
+    const p = Math.min(1, (now - start) / 900);
+    if (!c.isConnected) return;
+    paintMosaic(c, title, now / 1000, 1 - Math.pow(1 - p, 3));
+    if (p < 1) requestAnimationFrame(step); else c.remove();
+  };
+  requestAnimationFrame(step);
+}
 /* A section: an accessible heading, a surface under its screens, and a header placed with the frame names. */
 function heading(y, title) {
   put("h2", "vh", 0, y, null, null, esc(title));
@@ -364,9 +501,9 @@ function heading(y, title) {
   el.innerHTML = `<span class="t">${esc(title)}</span><span class="chips"></span>`;
   names.appendChild(el);
   const from = labels.length;
-  return (prefix) => {
-    const drawn = labels.slice(from), ids = drawn.map((l) => l.n.dataset.id), missing = ids.filter((id) => !shotOf(id)).length;
-    el.querySelector(".chips").innerHTML = [prefix, `${ids.length} ${ids.length === 1 ? "screen" : "screens"}`, missing ? `${missing} not captured` : ""].filter(Boolean).map((c) => `<span class="chip">${esc(c)}</span>`).join("");
+  return (prefix, noun = ["screen", "screens"]) => {
+    const drawn = labels.slice(from), ids = drawn.map((l) => l.n.dataset.id), missing = ids.filter((id) => !id.startsWith("v:") && !shotOf(id)).length;
+    el.querySelector(".chips").innerHTML = [prefix, `${ids.length} ${ids.length === 1 ? noun[0] : noun[1]}`, missing ? `${missing} not captured` : ""].filter(Boolean).map((c) => `<span class="chip">${esc(c)}</span>`).join("");
     sections.push({ el, y, w: Math.max(...drawn.map((l) => l.x + l.w)), bottom: Math.max(...drawn.map((l) => l.y + l.h)) });
   };
 }
@@ -491,7 +628,8 @@ function drawPages() {
 
 function render(keepView) {
   world.innerHTML = ""; names.innerHTML = ""; under.innerHTML = ""; labels = []; sections = []; edges = []; rects = {}; firstBox = null;
-  const size = mode === "flows" ? drawFlows() : drawPages();
+  const main = mode === "flows" ? drawFlows() : drawPages();
+  const size = drawVersions(main);
   world.style.width = size.w + "px"; world.style.height = size.h + "px";
   const nothing = !data.states.length;
   $("empty").hidden = !nothing;
@@ -633,6 +771,12 @@ function select(id, quiet) {
   if (comparing && comparing !== id) setCompare(null);
   selected = id; markSel();
   const s = byId().get(id);
+  if (id.startsWith("v:")) {
+    const [, set, name] = id.split(":"), chosen = chosenOf(set) || document.querySelector(`.frame.building[data-id="${CSS.escape(id)}"]`);
+    tool.innerHTML = chosen ? "" : `<button class="tbtn" type="button" data-act="choose" data-set="${esc(set)}" data-name="${esc(name)}">${icon("check-linear")}Choose this version</button>`;
+    tool.hidden = !!chosen; tool.dataset.id = id; placeTool();
+    return;
+  }
   const compare = shotOf(id)?.live ? `<button class="tbtn" type="button" data-act="compare" aria-pressed="${comparing === id}">${icon("sidebar-minimalistic-linear")}Compare with live</button>` : "";
   const open = data.project.liveUrl && s?.route ? `<a class="tbtn" href="${esc(data.project.liveUrl.replace(/\/$/, "") + s.route)}" target="_blank" rel="noopener">${icon("square-share-line-linear")}Open live page</a>` : "";
   tool.innerHTML = compare + open;
@@ -666,7 +810,15 @@ function moveHandle(pct) {
   const h = el.querySelector(".handle"); h.style.left = cmpAt + "%";
   h.setAttribute("aria-valuenow", String(Math.round(cmpAt))); h.setAttribute("aria-valuetext", `${Math.round(cmpAt)}% live`);
 }
-tool.addEventListener("click", (e) => { if (e.target.closest('[data-act="compare"]')) setCompare(comparing ? null : selected); });
+tool.addEventListener("click", async (e) => {
+  if (e.target.closest('[data-act="compare"]')) setCompare(comparing ? null : selected);
+  const choose = e.target.closest('[data-act="choose"]');
+  if (choose) {
+    choose.disabled = true;
+    try { await postTask("/api/tasks", { choice: { set: choose.dataset.set, name: choose.dataset.name, width } }); await load(true); }
+    catch (error) { choose.disabled = false; choose.title = error.message; }
+  }
+});
 vp.addEventListener("pointerdown", (e) => {
   const h = e.target.closest(".cmp .handle"); if (!h) return;
   e.stopPropagation(); h.setPointerCapture(e.pointerId);
@@ -839,11 +991,13 @@ function showActivity(a) {
   clearTimeout(actTimer);
   el.innerHTML = a.tool === "atlas_check"
     ? (a.phase === "start" ? "<i></i>Checking every screen" : a.phase === "done" ? "Checked every screen" : "The check failed")
+    : a.tool === "atlas_version_start"
+    ? `<i></i>Building a version of ${esc(name)}`
     : a.tool === "atlas_task_update"
     ? (a.phase === "start" ? "<i></i>Updating a task" : a.phase === "done" ? "Updated a task" : "A task update failed")
     : a.phase === "start" ? `<i></i>Capturing ${esc(name)}` : a.phase === "done" ? `Captured ${esc(name)}` : `Capture of ${esc(name)} failed`;
   el.hidden = false;
-  if (a.phase !== "start") actTimer = setTimeout(() => { el.hidden = true; }, 4000);
+  if (a.phase !== "start" && a.tool !== "atlas_version_start") actTimer = setTimeout(() => { el.hidden = true; }, 4000);
 }
 
 /* Comment mode: with Comment on, the element under the pointer is outlined. Click it to mark that element, or drag to mark a box,
@@ -853,7 +1007,7 @@ const STATUS_TEXT = { open: "Open", "in-progress": "In progress", "ready-for-rev
 const layouts = new Map();
 /* The element list of a capture, fetched once. */
 function layoutFor(id) {
-  const url = shotOf(id)?.layout; if (!url) return null;
+  const url = frameInfo(id).shot?.layout; if (!url) return null;
   if (!layouts.has(url)) { layouts.set(url, null); fetch(url).then((r) => r.json()).then((items) => layouts.set(url, items)).catch(() => layouts.delete(url)); }
   return layouts.get(url);
 }
@@ -918,7 +1072,7 @@ function openDraft(id, area, name) {
   draft = { id, area, name, back: document.activeElement };
   world.querySelector(".hover-el")?.remove();
   outline("tmark", id, area);
-  const s = byId().get(id);
+  const s = frameInfo(id);
   const pop = $("pop");
   pop.setAttribute("aria-label", `Ask for a change on ${s.name}`);
   pop.innerHTML = `<form id="tform">
@@ -942,7 +1096,7 @@ function closePop() {
 /* The popover sits below the mark, or above it when there is no room, kept on screen. */
 function placePop() {
   const pop = $("pop"); if (pop.hidden) return;
-  const id = draft?.id ?? popTask?.state, a = id && at(id);
+  const id = draft?.id ?? (popTask && taskFrame(popTask)), a = id && at(id);
   if (!a) { closePop(); return; }
   const area = draft ? draft.area : popTask.area;
   const box = area ?? { x: 0, y: 0, w: a.w, h: Math.min(a.h, 200) };
@@ -960,7 +1114,7 @@ function drawPins() {
       const box = t.area ?? { x: l.w - 12, y: 12, w: 0, h: 0 };
       const p = put("button", `pin ${t.status}`, l.x + box.x + box.w, l.y + box.y, null, null, String(i + 1));
       p.type = "button"; p.dataset.task = t.id;
-      p.setAttribute("aria-label", `Task ${i + 1} on ${byId().get(id)?.name ?? id}: ${STATUS_TEXT[t.status]}. ${t.words.slice(0, 80)}`);
+      p.setAttribute("aria-label", `Task ${i + 1} on ${frameInfo(id).name}: ${STATUS_TEXT[t.status]}. ${t.words.slice(0, 80)}`);
       p.setAttribute("aria-expanded", String(popTask?.id === t.id));
     });
   }
@@ -973,8 +1127,22 @@ vp.addEventListener("pointerdown", (e) => { if (e.target.closest(".pin")) e.stop
 function crop(png, task, label) {
   const full = { x: 0, y: 0, w: task.width, h: task.width >= 768 ? 900 : 844 };
   const b = task.area ? { x: Math.max(0, task.area.x - 24), y: Math.max(0, task.area.y - 24), w: task.area.w + 48, h: task.area.h + 48 } : full;
-  return `<div class="crop" style="aspect-ratio:${b.w} / ${b.h}"><img src="${esc(png)}" alt="${esc(label)}" style="width:${(task.width / b.w) * 100}%;left:${(-b.x / b.w) * 100}%;top:${(-b.y / b.h) * 100}%"><span aria-hidden="true">${esc(label)}</span></div>`;
+  return `<button class="crop" type="button" data-act="expand" aria-label="Open ${esc(label.toLowerCase())} and after full size" style="aspect-ratio:${b.w} / ${b.h}"><img src="${esc(png)}" alt="${esc(label)}" style="width:${(task.width / b.w) * 100}%;left:${(-b.x / b.w) * 100}%;top:${(-b.y / b.h) * 100}%"><span aria-hidden="true">${esc(label)}</span></button>`;
 }
+/* Before and after, whole and side by side, with the marked box drawn on each. */
+function expandPictures(t) {
+  const box = t.area ? `<i style="left:${(t.area.x / t.width) * 100}%;top:calc(${t.area.y}px * var(--k));width:${(t.area.w / t.width) * 100}%;height:calc(${t.area.h}px * var(--k))"></i>` : "";
+  const col = (png, label) => `<div class="ex-col"><h3>${esc(label)}</h3><div class="ex-pic"><img src="${esc(png)}" alt="${esc(label)}">${box}</div></div>`;
+  const body = $("expandBody");
+  body.style.setProperty("--w", `${t.width}px`);
+  body.innerHTML = col(t.before, "Before") + col(t.after.png, "After");
+  const dialog = $("expand");
+  dialog.showModal();
+  // The box is in the picture's CSS pixels: scale it by how wide the picture is drawn.
+  body.querySelectorAll(".ex-pic").forEach((pic) => pic.style.setProperty("--k", String(pic.offsetWidth / t.width)));
+}
+$("expandClose").addEventListener("click", () => $("expand").close());
+$("expand").addEventListener("click", (e) => { if (e.target === $("expand")) $("expand").close(); });
 const promptOf = (t) => {
   const name = byId().get(t.state)?.name ?? t.state;
   return `Atlas task ${t.id}, on "${name}" at ${t.width} px: ${t.words}${t.element ? `\nThe marked element is the ${t.element.tag} "${t.element.text}".` : ""}\nCall atlas_tasks to see the picture with the marked box. Change the code, capture ${t.state} with atlas_capture, then set the task to ready-for-review with atlas_task_update.`;
@@ -984,7 +1152,7 @@ function openThread(t, refresh) {
   const first = popTask?.id !== t.id;
   draft = null; popTask = t;
   if (first) sendingBack = null;
-  outline("tmark", t.state, t.area);
+  outline("tmark", taskFrame(t), t.area);
   document.querySelectorAll(".pin").forEach((p) => p.setAttribute("aria-expanded", String(p.dataset.task === t.id)));
   const last = t.log.at(-1), agentNote = [...t.log].reverse().find((l) => l.by === "agent" && l.note);
   const review = t.status === "ready-for-review";
@@ -1017,12 +1185,14 @@ $("pop").addEventListener("submit", async (e) => {
   const words = $("tdraft").value.trim();
   if (!words) { showErr("Write what should change, then send it."); $("tdraft").focus(); return; }
   try {
-    await postTask("/api/tasks", { state: draft.id, width, commit: data.shown.commit, words, ...(draft.area ? { area: draft.area } : {}) });
+    const f = frameInfo(draft.id);
+    await postTask("/api/tasks", { state: f.state, width, commit: f.commit, words, ...(draft.area ? { area: draft.area } : {}), ...(f.variant ? { variant: f.variant } : {}) });
     closePop();
     await load(true);
   } catch (error) { showErr(error.message); }
 });
 $("pop").addEventListener("click", async (e) => {
+  if (e.target.closest('[data-act="expand"]') && popTask?.before && popTask.after) { expandPictures(popTask); return; }
   const b = e.target.closest("[data-t]"); if (!b) return;
   const act = b.dataset.t, t = popTask;
   if (act === "cancel") { closePop(); return; }
@@ -1101,6 +1271,7 @@ $("connect").addEventListener("click", async (e) => {
 });
 document.addEventListener("pointerdown", (e) => { if (!$("connect").hidden && !$("connect").contains(e.target) && e.target !== $("connectBtn")) toggleConnect(false); });
 document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("expand").open) return;
   if (e.key === "Escape") { if (!$("connect").hidden) { toggleConnect(false); return; } if (!$("pop").hidden) { closePop(); return; } if (commenting) { setCommenting(false); return; } if (comparing) { setCompare(null); return; } if (selected) { deselect(); return; } }
   if (e.target.matches("input, textarea, select, [role=listbox]")) return;
   if (e.key === "0") fitAll();

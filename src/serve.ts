@@ -8,7 +8,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { createServer, type Activity } from "./mcp.js";
 import { z } from "zod";
 import { AtlasError } from "./project.js";
-import { createTask, CreateSchema, updateTask } from "./tasks.js";
+import { chooseVariant, createTask, CreateSchema, updateTask } from "./tasks.js";
 import { viewerData } from "./viewer-data.js";
 
 export const DEFAULT_PORT = 4317;
@@ -96,7 +96,9 @@ export function serve(root: string, port: number = DEFAULT_PORT): Promise<Runnin
       try {
         const body = JSON.parse(await readBody(req)) as unknown;
         const task = path === "/api/tasks"
-          ? createTask(root, CreateSchema.parse(body))
+          ? (ChoiceSchema.safeParse(body).success
+            ? (() => { const { choice } = ChoiceSchema.parse(body); return chooseVariant(root, choice.set, choice.name, choice.width); })()
+            : createTask(root, CreateSchema.parse(body)))
           : (() => {
               const { status, note } = ReviewSchema.parse(body);
               return updateTask(root, path.slice("/api/tasks/".length), "person", status, note);
@@ -155,6 +157,7 @@ export function serve(root: string, port: number = DEFAULT_PORT): Promise<Runnin
   });
 }
 
+const ChoiceSchema = z.strictObject({ choice: z.strictObject({ set: z.string().min(1), name: z.string().min(1), width: z.number().int().positive().optional() }) });
 const ReviewSchema = z.strictObject({ status: z.enum(["approved", "sent-back"]), note: z.string().max(4000).optional() });
 
 /** A request's body, refused past 64 KB, which no task needs. */

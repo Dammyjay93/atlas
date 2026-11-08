@@ -6,6 +6,7 @@ import { snapshotPage } from "./snapshot.js";
 import { readStates, type State } from "./states.js";
 import { saveCapture, type Entry } from "./store.js";
 import { layoutMap, type LayoutItem } from "./text-map.js";
+import { markBuilding, saveVariant, type Variant } from "./variants.js";
 
 export interface CookieInput {
   name: string;
@@ -25,6 +26,8 @@ export interface CaptureInput {
   widths?: number[];
   /** True when baseUrl serves the live ref's code, such as a second copy of the project checked out at live. The capture is filed under the live commit. */
   live?: boolean;
+  /** A version of a screen the person will choose from, captured from its own address. It is filed under its set. */
+  variant?: Variant;
 }
 
 export interface WidthResult {
@@ -156,6 +159,7 @@ export async function capture(root: string, input: CaptureInput): Promise<Captur
   const { states } = readStates(root);
   const state = states.find((s) => s.id === input.state);
   if (!state) throw new AtlasError(`No valid recipe with id "${input.state}". Recipes: ${states.map((s) => s.id).join(", ") || "none"}. Call atlas_states to see recipes that need repair.`);
+  if (input.live && input.variant) throw new AtlasError("A capture is either of live or of a version to choose from, not both.");
   const commit = input.live ? resolveRef(root, config.liveRef) : resolveRef(root, "HEAD");
   if (!commit) {
     throw new AtlasError(input.live ? `Live's ref "${config.liveRef}" does not resolve to a commit. Fetch it, or set "liveRef" in .atlas/config.json.` : "The project has no commit yet. Commit once, then capture.");
@@ -166,15 +170,25 @@ export async function capture(root: string, input: CaptureInput): Promise<Captur
   const browser = await launch();
   let shots: Shot[];
   try {
-    shots = await shoot(browser, root, state, base, input.cookies, input.widths ?? state.widths ?? config.widths);
+    // A version is captured from its own address; the rest of the recipe (steps, widths) applies as it is.
+    const shown = input.variant?.route ? { ...state, route: input.variant.route } : state;
+    shots = await shoot(browser, root, shown, base, input.cookies, input.widths ?? state.widths ?? config.widths);
   } finally {
     await browser.close();
   }
+  const variant = input.variant;
   const results = shots.map((s): WidthResult => {
+    if (variant) {
+      const paths = saveVariant(root, variant, commit, state.id, s.width, { png: s.png, html: s.html, layout: s.layout }, s.capturedAt);
+      const entry: Entry = { ...paths, hash: createHash("sha256").update(s.png).digest("hex"), route: s.route, ...(s.landedOn ? { landedOn: s.landedOn } : {}), status: s.status, capturedAt: s.capturedAt, uncommitted };
+      return { width: s.width, entry, changed: true, preview: s.preview };
+    }
     const entry = { hash: createHash("sha256").update(s.png).digest("hex"), route: s.route, ...(s.landedOn ? { landedOn: s.landedOn } : {}), status: s.status, capturedAt: s.capturedAt, uncommitted };
     const previous = saveCapture(root, at, state.id, s.width, { png: s.png, html: s.html, layout: s.layout }, entry);
     const dir = `.atlas/store/${commit}/${state.id}/${s.width}`;
     return { width: s.width, entry: { png: `${dir}.png`, html: `${dir}.html`, layout: `${dir}.layout.json`, ...entry }, changed: previous?.hash !== entry.hash, preview: s.preview };
   });
+  // Every width is filed, so the version is built: the viewer swaps its building frame for the pictures at once.
+  if (variant) markBuilding(root, variant, commit, state.id, false);
   return { state: state.id, commit, branch: at.branch, uncommitted, widths: results };
 }

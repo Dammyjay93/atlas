@@ -6,6 +6,7 @@ import { AtlasError, resolveRef } from "./project.js";
 import { readStates } from "./states.js";
 import { readManifest, type Entry } from "./store.js";
 import type { LayoutItem } from "./text-map.js";
+import { readVariantSets } from "./variants.js";
 
 /**
  * A task moves: open → in-progress → ready-for-review → approved, or → sent-back and round again.
@@ -28,6 +29,10 @@ const FrontSchema = z.strictObject({
   area: BoxSchema.optional(),
   /** The element under the box, from the capture's element list. */
   element: z.strictObject({ tag: z.string(), text: z.string(), box: BoxSchema }).optional(),
+  /** For a choice between versions: the set, the version kept, and its branch. */
+  choice: z.strictObject({ set: z.string(), name: z.string(), others: z.array(z.string()) }).optional(),
+  /** For a comment on a version: the set and the version it was marked on. */
+  variant: z.strictObject({ set: z.string(), name: z.string() }).optional(),
   /** The capture the agent made when it finished. */
   after: z.strictObject({ commit: z.string(), png: z.string(), capturedAt: z.string() }).optional(),
   created: z.string(),
@@ -75,8 +80,17 @@ export function readTask(root: string, id: string): Task {
   }
 }
 
-/** The capture a task was marked on. */
+/** A version's capture of one state at one width, as an entry. */
+function versionEntry(root: string, set: string, name: string, state: string, width: number): Entry | undefined {
+  const option = readVariantSets(root).find((v) => v.set === set)?.options.find((o) => o.name === name);
+  const files = option?.shots[state]?.[String(width)];
+  return option && files ? { ...files, hash: "", route: option.route ?? "", status: 200, capturedAt: option.capturedAt, uncommitted: false } : undefined;
+}
+
+/** The capture a task was marked on: a version's, or the state's at the task's commit. */
 export function beforeOf(root: string, task: Task): Entry | undefined {
+  const version = task.variant ?? (task.choice ? { set: task.choice.set, name: task.choice.name } : undefined);
+  if (version) return versionEntry(root, version.set, version.name, task.state, task.width);
   return readManifest(root, task.commit)?.states[task.state]?.[String(task.width)];
 }
 
@@ -96,14 +110,18 @@ export const CreateSchema = z.strictObject({
   width: z.number().int().positive(),
   commit: z.string().min(1),
   area: BoxSchema.optional(),
+  /** When the mark is on a version: its set and name. */
+  variant: z.strictObject({ set: z.string().min(1), name: z.string().min(1) }).optional(),
   words: z.string().trim().min(1, "Write what should change.").max(4000)
 });
 
 /** Makes a task from the person's mark on a capture. */
 export function createTask(root: string, input: z.infer<typeof CreateSchema>): Task {
   if (!readStates(root).states.some((s) => s.id === input.state)) throw new AtlasError(`No valid recipe with id "${input.state}".`);
-  const entry = readManifest(root, input.commit)?.states[input.state]?.[String(input.width)];
-  if (!entry) throw new AtlasError(`${input.state} has no capture at ${input.width} pixels at ${input.commit}.`);
+  const entry = input.variant
+    ? versionEntry(root, input.variant.set, input.variant.name, input.state, input.width)
+    : readManifest(root, input.commit)?.states[input.state]?.[String(input.width)];
+  if (!entry) throw new AtlasError(input.variant ? `Version "${input.variant.name}" of "${input.variant.set}" has no capture of ${input.state} at ${input.width} pixels.` : `${input.state} has no capture at ${input.width} pixels at ${input.commit}.`);
   const now = new Date();
   const id = `${input.state}-${now.getTime().toString(36)}`;
   const element = input.area ? elementUnder(root, entry, input.area) : undefined;
@@ -115,9 +133,38 @@ export function createTask(root: string, input: z.infer<typeof CreateSchema>): T
     status: "open",
     ...(input.area ? { area: input.area } : {}),
     ...(element ? { element } : {}),
+    ...(input.variant ? { variant: input.variant } : {}),
     created: now.toISOString(),
     log: [{ at: now.toISOString(), by: "person", status: "open" }],
-    words: input.words
+    words: input.variant ? `On version ${input.variant.name} of "${input.variant.set}": ${input.words}` : input.words
+  };
+  write(root, task);
+  return task;
+}
+
+/** Makes the task that keeps one version of a set: the others and the switch between them come out of the code. */
+export function chooseVariant(root: string, set: string, name: string, shown?: number): Task {
+  const found = readVariantSets(root).find((v) => v.set === set);
+  const option = found?.options.find((o) => o.name === name);
+  if (!found || !option) throw new AtlasError(`No version "${name}" in the set "${set}".`);
+  if (readTasks(root).tasks.some((t) => t.choice?.set === set && t.status !== "sent-back")) throw new AtlasError(`A version of "${set}" is already chosen.`);
+  const [state, byWidth] = Object.entries(option.shots)[0] ?? [];
+  // The width the person chose at, when the version has it; else its widest capture.
+  const widths = Object.keys(byWidth ?? {}).map(Number);
+  const width = shown && widths.includes(shown) ? shown : Math.max(0, ...widths);
+  if (!state || !width) throw new AtlasError(`Version "${name}" of "${set}" has no capture.`);
+  const others = found.options.filter((o) => o.name !== name).map((o) => o.name);
+  const now = new Date();
+  const task: Task = {
+    id: `${set}-${now.getTime().toString(36)}`,
+    state,
+    width,
+    commit: option.commit,
+    status: "open",
+    choice: { set, name, others },
+    created: now.toISOString(),
+    log: [{ at: now.toISOString(), by: "person", status: "open" }],
+    words: `Keep version ${name} of "${set}" (${option.note}). Make it the screen's only version: remove ${others.length ? `version${others.length === 1 ? "" : "s"} ${others.join(", ")} and ` : ""}the switch between the versions from the code, and apply any open comments on version ${name}. Capture the screens again, call atlas_check, then mark this task ready for review.`
   };
   write(root, task);
   return task;

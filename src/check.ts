@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { AT_ONCE, baseOf, hasUncommitted, inParallel, launch, shoot, type CookieInput } from "./capture.js";
+import { baseOf, bySetup, launch, oneAtATime, shoot, uncommittedFiles, type CookieInput } from "./capture.js";
 import { compareEntries, type Area } from "./compare.js";
 import { currentBranch, FlowmapError, readConfig, resolveRef } from "./project.js";
 import { readStates } from "./states.js";
@@ -31,7 +31,8 @@ export interface CheckedWidth {
 
 export interface CheckResult {
   base: { commit: string } | null;
-  head: { commit: string; uncommitted: boolean };
+  /** `changes` lists the files with uncommitted changes. */
+  head: { commit: string; uncommitted: boolean; changes: string[] };
   widths: CheckedWidth[];
 }
 
@@ -72,26 +73,31 @@ function baseline(root: string, head: string, uncommitted: boolean, wanted?: str
  * screen its change touched, including screens it did not mean to change, before it says it is done. On committed code, the
  * captures are filed under the commit, so the map shows every screen at it; on uncommitted code they are kept apart and replace nothing.
  */
-export async function check(root: string, input: CheckInput): Promise<CheckResult> {
+export function check(root: string, input: CheckInput): Promise<CheckResult> {
+  return oneAtATime(() => checkNow(root, input));
+}
+
+async function checkNow(root: string, input: CheckInput): Promise<CheckResult> {
   const config = readConfig(root);
   const { states } = readStates(root);
   if (!states.length) throw new FlowmapError("There are no state recipes to check. Write recipes first.");
   const head = resolveRef(root, "HEAD");
   if (!head) throw new FlowmapError("The project has no commit yet. Commit once, then check.");
   const base = baseOf(input.baseUrl);
-  const uncommitted = hasUncommitted(root);
+  const changes = uncommittedFiles(root);
+  const uncommitted = changes.length > 0;
   const before = baseline(root, head, uncommitted, input.base);
   rmSync(checkDir(root), { recursive: true, force: true });
   const browser = await launch();
   let widths: CheckedWidth[];
   try {
-    // Several states at the same time, each with all its widths; the results keep the recipes' order.
-    const perState = await inParallel(states, AT_ONCE, async (state) => {
+    // One setup at a time, and the states of each setup several at a time, each with all its widths; the results keep the recipes' order.
+    const perState = await bySetup(root, states, base, async (state, session) => {
       const widths: CheckedWidth[] = [];
       const sizes = state.widths ?? config.widths;
       let shots;
       try {
-        shots = await shoot(browser, root, state, base, input.cookies, sizes);
+        shots = await shoot(browser, root, state, base, [...(input.cookies ?? []), ...session], sizes);
       } catch (error) {
         for (const width of sizes) widths.push({ state: state.id, name: state.name, width, status: "failed", areas: [], problem: error instanceof Error ? error.message : String(error) });
         return widths;
@@ -125,6 +131,6 @@ export async function check(root: string, input: CheckInput): Promise<CheckResul
   } finally {
     await browser.close();
   }
-  return { base: before[0] ? { commit: before[0].commit } : null, head: { commit: head, uncommitted }, widths };
+  return { base: before[0] ? { commit: before[0].commit } : null, head: { commit: head, uncommitted, changes }, widths };
 }
 

@@ -1,4 +1,4 @@
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, request, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -114,11 +114,19 @@ describe("the live stream", () => {
 });
 
 describe("flowmap with no command", () => {
-  it("sets up a new project and starts Flowmap", async () => {
+  it("prints the usage when a program runs it, instead of running until stopped", () => {
+    const run = spawnSync("node", [CLI, "--no-open"], { encoding: "utf8" });
+    expect(run.status).toBe(2);
+    expect(run.stdout).toContain("runs until you press Ctrl+C");
+    expect(run.stdout).toContain("setup");
+    expect(run.stdout).toContain("Usage:");
+  });
+
+  it("sets up a new project and starts Flowmap with start", async () => {
     const fresh = mkdtempSync(join(tmpdir(), "flowmap-start-"));
     try {
       git(fresh, "init", "-q", "-b", "main");
-      const child = spawn("node", [CLI, "--port", "0", "--no-open"], { cwd: fresh });
+      const child = spawn("node", [CLI, "start", "--port", "0", "--no-open"], { cwd: fresh });
       const text = await new Promise<string>((done, fail) => {
         let seen = "";
         child.stdout.on("data", (c: Buffer) => {

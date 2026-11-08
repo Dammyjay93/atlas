@@ -14,6 +14,8 @@ export const ConfigSchema = z.object({
   widths: z.array(z.number().int().positive()).min(1).default([1440, 390]),
   /** CSS selectors removed before every capture, such as a development overlay. */
   hide: z.array(z.string().min(1)).default([]),
+  /** Files a tool rewrites when the app starts, such as AGENTS.md under next dev. Their uncommitted changes do not mark captures as uncommitted. */
+  ignoreChanges: z.array(z.string().min(1)).default([]),
   /** A fixed time for the browser's clock during capture. Dates the server works out follow the server's clock instead, so seed those relative to the current time. */
   time: z.iso.datetime({ offset: true }).optional()
 });

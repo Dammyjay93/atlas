@@ -102,14 +102,14 @@ export function createServer(root: string, onActivity: (activity: Activity) => v
     {
       title: "Capture a state",
       description:
-        "Capture one state at the current commit: a picture and an HTML snapshot for each screen width, saved in .flowmap/store. Prepare the state first: run the recipe's setup, start the app, and make a test session if the state needs sign-in. Returns a picture of each width so you can check the result.",
+        "Capture one state at the current commit: a picture and an HTML snapshot for each screen width, saved in .flowmap/store. Start the app first. Flowmap runs the recipe's setup, then its session command, and opens the page with the cookies the session printed. Returns a picture of each width so you can check the result.",
       inputSchema: {
         state: z.string().describe("The recipe id, from flowmap_states"),
         baseUrl: z.string().describe("Where you started the app, such as http://localhost:3000"),
         cookies: z
           .array(z.object({ name: z.string(), value: z.string(), path: z.string().optional(), httpOnly: z.boolean().optional(), secure: z.boolean().optional(), sameSite: z.enum(["Strict", "Lax", "None"]).optional() }))
           .optional()
-          .describe("The test session cookies, for states that need sign-in"),
+          .describe("Extra cookies for this capture. A recipe's session command is the usual way to sign in"),
         widths: z.array(z.number().int().positive()).optional().describe("Screen widths, if they differ from the recipe and the settings"),
         live: z.boolean().optional().describe("True when baseUrl serves the live ref's code, from a second copy of the project checked out at live. The capture is filed under live's commit"),
         variant: VariantSchema.optional().describe("When you built several versions of a screen for the person to choose from: the set (such as job-card), this version's name (such as a), a one-sentence note on what makes it different, and the route that shows it (such as /checkout?version=b). Build the versions side by side in this working copy, behind a switch.")
@@ -125,7 +125,7 @@ export function createServer(root: string, onActivity: (activity: Activity) => v
           state: result.state,
           commit: result.commit,
           branch: result.branch,
-          ...(result.uncommitted ? { note: "The project has uncommitted changes, so these captures show more than the commit." } : {}),
+          ...(result.uncommitted ? { note: `The project has uncommitted changes in ${result.changes.join(", ")}, so these captures show more than the commit. If a tool rewrote one of these files when the app started, list it in "ignoreChanges" in .flowmap/config.json.` } : {}),
           widths: result.widths.map((w) => {
             const cmp = versus?.live.captured ? versus.widths.find((v) => v.width === w.width) : undefined;
             return { width: w.width, changed: w.changed, status: w.entry.status, ...(w.entry.landedOn ? { landedOn: w.entry.landedOn } : {}), ...(cmp ? { againstLive: cmp.status } : {}), png: w.entry.png, html: w.entry.html };
@@ -213,13 +213,13 @@ export function createServer(root: string, onActivity: (activity: Activity) => v
     {
       title: "Check every screen",
       description:
-        "Before you say a change is done: captures every state at your current code and compares each with its capture before your change, so you see every screen your change touched, including screens you did not mean to change. Start the app with your change first, and run each recipe's setup. Returns each state's status (same, changed, new, failed), the elements that changed, and pictures of each changed area before and now. Fix any change you did not intend, or tell the person why it is expected. Run it again after you commit: on committed code it files every capture under the commit, so the person sees every screen at it.",
+        "Before you say a change is done: captures every state at your current code and compares each with its capture before your change, so you see every screen your change touched, including screens you did not mean to change. Start the app with your change first. Flowmap runs each recipe's setup and session, one setup at a time. Returns each state's status (same, changed, new, failed), the elements that changed, and pictures of each changed area before and now. Fix any change you did not intend, or tell the person why it is expected. Run it again after you commit: on committed code it files every capture under the commit, so the person sees every screen at it.",
       inputSchema: {
         baseUrl: z.string().describe("Where you started the app with your change, such as http://localhost:3000"),
         cookies: z
           .array(z.object({ name: z.string(), value: z.string(), path: z.string().optional(), httpOnly: z.boolean().optional(), secure: z.boolean().optional(), sameSite: z.enum(["Strict", "Lax", "None"]).optional() }))
           .optional()
-          .describe("The test session cookies, for states that need sign-in"),
+          .describe("Extra cookies for every state. A recipe's session command is the usual way to sign in"),
         base: z.string().optional().describe("A commit or ref to compare with, if not the captures from before your change")
       }
     },

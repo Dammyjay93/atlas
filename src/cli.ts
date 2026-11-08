@@ -22,7 +22,7 @@ const HELP = `flowmap ${VERSION}
 See every screen of your web app as the code renders it.
 
 Usage:
-  flowmap                         Start Flowmap in this project: set it up if needed, serve it and open the viewer
+  flowmap [start]                 In a terminal: set Flowmap up if needed, serve it and open the viewer, until Ctrl+C
   flowmap setup                   For your coding agent: set Flowmap up, start it in the background, open the viewer,
                                 and print what the agent does next
   flowmap init                    Set up .flowmap/ in this project
@@ -32,7 +32,7 @@ Usage:
   flowmap capture [<state>...] --base-url <url> [--cookie name=value]... [--width <n>]... [--live]
                                 [--variant <set>/<name> --note <text> [--route <path>]]
                                 Capture every state, or the ones named, at the current commit; one state at live with --live,
-                                or as a version to choose from
+                                or as a version to choose from. Runs each recipe's setup and session first, one setup at a time
   flowmap check --base-url <url> [--cookie name=value]... [--json]
                                 Capture every state and list the screens that changed since before your change
   flowmap tasks [--status <s>] [--json]
@@ -59,6 +59,11 @@ const STATUS_TEXT = { same: "same as live", changed: "changed from live", new: "
 const KIND_TEXT = { added: "Added", removed: "Removed", moved: "Moved", changed: "Looks different" } as const;
 
 const out = (text: string) => process.stdout.write(text.endsWith("\n") ? text : text + "\n");
+
+/** Names the files that make a capture show more than its commit. */
+const withChanges = (changes: string[]) =>
+  changes.length ? ` with uncommitted changes in ${changes.slice(0, 3).join(", ")}${changes.length > 3 ? ` and ${changes.length - 3} more` : ""}` : "";
+const IGNORE_HINT = `If a tool rewrote one of these files when the app started, such as AGENTS.md under next dev, list it in "ignoreChanges" in .flowmap/config.json.`;
 
 function portOf(value: string | undefined): number {
   if (value === undefined) return DEFAULT_PORT;
@@ -104,10 +109,10 @@ const self = () => (/[\\/]_npx[\\/]/.test(process.argv[1] ?? "") ? "npx flowmap"
 function nextForAgent(viewer: string, mcp: string, recipes: number): string {
   return `Flowmap is running at ${viewer} and is open in the person's browser. Do the next steps now, without asking the person:
 
-1. ${recipes ? `The project has ${recipes} recipes in .flowmap/states/. Add one for each screen that has none.` : "Find the app's screens from its routes, and write one recipe for each in .flowmap/states/<id>.json."} Start with the screens a person sees most. Leave out screens that need sign-in unless the project has a way to make a test session.
+1. ${recipes ? `The project has ${recipes} recipes in .flowmap/states/. Add a recipe for every state that has none.` : "Find the app's screens from its routes, and write a recipe in .flowmap/states/<id>.json for every state."} Every state means each route, and on each page each tab, menu, dialog, drawer, step of a flow, and each empty, error, plan or role state a person can reach. Do not leave out a screen because it needs sign-in or data: give it a setup command that puts the data in that state, and a session command that signs in a test account. The recipe guide below shows how.
 2. Start the app's development server if it is not running.
 3. Check the recipes with ${self()} states, and fix any it lists as invalid.
-4. Capture every screen: ${self()} capture --base-url <the app's address>. Each screen appears in the person's browser as it is captured. Fix any recipe whose capture landed on the wrong page. If the pictures show development-only buttons or badges, such as a router or query devtools button, add their CSS selectors to "hide" in .flowmap/config.json. Then capture again.
+4. Capture every screen with one command: ${self()} capture --base-url <the app's address>. Flowmap runs each recipe's setup and session itself. Each screen appears in the person's browser as it is captured. Fix any recipe whose capture failed or landed on the wrong page. If the pictures show development-only buttons or badges, such as a router or query devtools button, add their CSS selectors to "hide" in .flowmap/config.json. If the capture reports uncommitted changes only in files the development server rewrote as it started, add those files to "ignoreChanges" in .flowmap/config.json. Then capture again.
 5. Connect yourself to Flowmap for later work. Its tools, such as flowmap_capture and flowmap_tasks, load in your next session; until then, use the commands above. ${connectInfo(mcp).clients.filter((c) => c.client !== "cursor").map((c) => `${c.name}: ${c.command}.`).join(" ")} Cursor: ${self()} connect --write cursor.
 6. Tell the person how many screens are in Flowmap, and that they can mark any of them for you to change.
 
@@ -142,6 +147,11 @@ async function main(argv: string[]): Promise<number> {
   const here = values.root ?? process.cwd();
   switch (command ?? "start") {
     case "start": {
+      // Started by a program, such as a coding agent, it would serve until stopped and the program would see nothing.
+      if (!command && !process.stdout.isTTY) {
+        out(`"flowmap" with no command starts Flowmap and runs until you press Ctrl+C, so run it in a terminal. A coding agent runs "${self()} setup" instead.\n\n${HELP}`);
+        return 2;
+      }
       let root: string;
       try {
         root = findRoot(here);
@@ -149,6 +159,12 @@ async function main(argv: string[]): Promise<number> {
         if (!existsSync(join(here, ".git"))) throw new FlowmapError(`${here} is not the root of a git project. Run flowmap in your project's root folder.`);
         root = init(here).root;
         out(`Set up Flowmap in ${root}.`);
+      }
+      const already = await servingAt(resolve(root));
+      if (already !== null) {
+        out(`Flowmap for ${readConfig(root).name} is already running at http://localhost:${already}/`);
+        if (!values["no-open"]) openInBrowser(`http://localhost:${already}/`);
+        return 0;
       }
       const running = await serve(root, portOf(values.port));
       out(`Flowmap for ${readConfig(root).name} is running at ${running.viewer}`);
@@ -244,20 +260,22 @@ async function main(argv: string[]): Promise<number> {
         const started = Date.now();
         const results = await captureMany(findRoot(here), { states: ids, baseUrl: values["base-url"], cookies, ...(widths ? { widths } : {}) });
         if (values.json) return out(JSON.stringify(results.map((r) => ({ ...r, widths: r.widths.map(({ preview, ...w }) => w) })), null, 2)), 0;
-        out(`Captured ${results.length} ${results.length === 1 ? "state" : "states"} at ${results[0]?.commit ?? ""}${results[0]?.uncommitted ? " with uncommitted changes" : ""} in ${Math.round((Date.now() - started) / 100) / 10} s`);
+        out(`Captured ${results.length} ${results.length === 1 ? "state" : "states"} at ${results[0]?.commit ?? ""}${withChanges(results[0]?.changes ?? [])} in ${Math.round((Date.now() - started) / 100) / 10} s`);
         for (const r of results) {
           const odd = r.widths.filter((w) => w.entry.landedOn || w.entry.status < 200 || w.entry.status >= 300);
           out(`  ${r.state}${odd.map((w) => `, at ${w.width}: ${w.entry.landedOn ? `landed on ${w.entry.landedOn}` : `HTTP ${w.entry.status}`}`).join("")}`);
         }
+        if (results[0]?.uncommitted) out(IGNORE_HINT);
         return 0;
       }
       const result = await capture(findRoot(here), { state: id ?? "", baseUrl: values["base-url"], cookies, live: values.live, ...(variant ? { variant } : {}), ...(widths ? { widths } : {}) });
       if (values.json) return out(JSON.stringify({ ...result, widths: result.widths.map(({ preview, ...w }) => w) }, null, 2)), 0;
-      out(`Captured ${result.state} at ${values.live ? "live, " : ""}${result.commit}${result.uncommitted ? " with uncommitted changes" : ""}`);
+      out(`Captured ${result.state} at ${values.live ? "live, " : ""}${result.commit}${withChanges(result.changes)}`);
       for (const w of result.widths) {
         const status = w.entry.status >= 200 && w.entry.status < 300 ? "" : `, the page answered HTTP ${w.entry.status}`;
         out(`  ${w.width}: ${w.entry.png}${w.changed ? "" : " (same as before)"}${w.entry.landedOn ? `, landed on ${w.entry.landedOn}` : ""}${status}`);
       }
+      if (result.uncommitted) out(IGNORE_HINT);
       return 0;
     }
     case "check": {
@@ -269,7 +287,8 @@ async function main(argv: string[]): Promise<number> {
       });
       const result = await check(findRoot(here), { baseUrl: values["base-url"], cookies });
       if (values.json) return out(JSON.stringify(result, null, 2)), 0;
-      out(`Checked ${result.head.commit}${result.head.uncommitted ? " with uncommitted changes" : ""} against ${result.base?.commit ?? "nothing (no earlier captures)"}`);
+      out(`Checked ${result.head.commit}${withChanges(result.head.changes)} against ${result.base?.commit ?? "nothing (no earlier captures)"}`);
+      if (result.head.uncommitted) out(IGNORE_HINT);
       for (const w of result.widths) {
         out(`  ${w.state} at ${w.width}: ${w.status}${w.problem ? `: ${w.problem}` : ""}`);
         for (const line of new Set(w.areas.flatMap((a) => a.changes.map((c) => `${KIND_TEXT[c.kind]}: ${c.name}`)))) out(`    ${line}`);

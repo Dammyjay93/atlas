@@ -7,7 +7,7 @@ import { join, resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { afterAll, beforeAll, beforeEach, afterEach, describe, expect, it } from "vitest";
-import { capture } from "../src/capture.js";
+import { capture, captureMany, parseSession } from "../src/capture.js";
 
 const CLI = resolve("dist/cli.js");
 const git = (dir: string, ...args: string[]) => execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" }).trim();
@@ -27,6 +27,7 @@ beforeAll(async () => {
       return res.writeHead(302, { location: "/sign-in" }).end();
     }
     if (url.pathname === "/sign-in") return html(page("<h1>Sign in</h1>"));
+    if (url.pathname === "/data") return html(page(`<h1>${readFileSync(join(project, "data.txt"), "utf8").trim()}</h1>`));
     if (url.pathname === "/time") return html(page(`<h1 id="t"></h1><script>document.getElementById("t").textContent = new Date().toISOString()</script>`));
     res.writeHead(404).end();
   });
@@ -106,6 +107,46 @@ describe("capture", () => {
   it("marks captures made with uncommitted changes", async () => {
     writeFileSync(join(project, "app.js"), "change");
     expect((await capture(project, { state: "cart", baseUrl })).uncommitted).toBe(true);
+  });
+
+  it("names the files with uncommitted changes, and leaves out the ones in ignoreChanges", async () => {
+    writeFileSync(join(project, "AGENTS.md"), "one");
+    git(project, "add", "AGENTS.md");
+    git(project, "commit", "-qm", "Agents");
+    writeFileSync(join(project, "AGENTS.md"), "rewritten by the dev server");
+    expect((await capture(project, { state: "cart", baseUrl })).changes).toEqual(["AGENTS.md"]);
+    const file = join(project, ".flowmap", "config.json");
+    writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, "utf8")), ignoreChanges: ["AGENTS.md"] }));
+    expect((await capture(project, { state: "cart", baseUrl })).uncommitted).toBe(false);
+  });
+
+  it("runs the recipe's setup, then its session, and signs in with the cookies the session printed", async () => {
+    writeFileSync(join(project, ".flowmap", "states", "account.json"), JSON.stringify({ id: "account", name: "Account", route: "/account", widths: [400], setup: "echo good > sid.txt", session: "echo \"sid=$(cat sid.txt); Path=/; HttpOnly\"" }));
+    const result = await capture(project, { state: "account", baseUrl });
+    expect(only(result).entry.landedOn).toBeUndefined();
+    expect(snapshot(result)).toContain("Welcome back");
+  });
+
+  it("says which command failed and what it printed", async () => {
+    writeFileSync(join(project, ".flowmap", "states", "account.json"), JSON.stringify({ id: "account", name: "Account", route: "/account", widths: [400], setup: "echo 'no database' >&2; exit 3" }));
+    await expect(capture(project, { state: "account", baseUrl })).rejects.toThrow(/The setup of "account" failed with exit code 3: echo 'no database'.*\nno database/s);
+    writeFileSync(join(project, ".flowmap", "states", "account.json"), JSON.stringify({ id: "account", name: "Account", route: "/account", widths: [400], session: "true" }));
+    await expect(capture(project, { state: "account", baseUrl })).rejects.toThrow(/printed no cookies/);
+  });
+
+  it("reads one name=value cookie on each line of a session's output", () => {
+    expect(parseSession("a=1\n\n__Host-sid=x=y; Secure\n", "s")).toEqual([{ name: "a", value: "1" }, { name: "__Host-sid", value: "x=y" }]);
+    expect(() => parseSession("{\"token\":1}", "s")).toThrow(/one cookie on each line as name=value/);
+  });
+
+  it("runs each setup once, just before its states, and never two setups at the same time", async () => {
+    for (const r of [{ id: "a-one", setup: "a" }, { id: "a-two", setup: "a" }, { id: "b-one", setup: "b" }]) {
+      writeFileSync(join(project, ".flowmap", "states", `${r.id}.json`), JSON.stringify({ id: r.id, name: r.id, route: "/data", widths: [400], setup: `echo ${r.setup} >> setups.txt && echo ${r.setup} > data.txt` }));
+    }
+    const results = await captureMany(project, { baseUrl, states: ["a-one", "b-one", "a-two"] });
+    expect(results.map((r) => r.state)).toEqual(["a-one", "a-two", "b-one"]);
+    expect(readFileSync(join(project, "setups.txt"), "utf8")).toBe("a\nb\n");
+    expect(results.map((r) => /<h1>(\w+)<\/h1>/.exec(readFileSync(join(project, only(r).entry.html), "utf8"))?.[1])).toEqual(["a", "a", "b"]);
   });
 
   it("names the recipes when the state does not exist", async () => {

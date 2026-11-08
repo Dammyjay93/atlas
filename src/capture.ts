@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { exec, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chromium, type Browser } from "playwright";
 import { currentBranch, readConfig, resolveRef, FlowmapError } from "./project.js";
@@ -44,6 +44,8 @@ export interface CaptureResult {
   commit: string;
   branch: string | null;
   uncommitted: boolean;
+  /** The files with uncommitted changes, when `uncommitted`. */
+  changes: string[];
   widths: WidthResult[];
 }
 
@@ -69,12 +71,19 @@ export async function launch(): Promise<Browser> {
   }
 }
 
-/** True when the project has uncommitted changes outside .flowmap/, so a capture shows more than its commit. */
-export function hasUncommitted(root: string): boolean {
+/**
+ * The project's files with uncommitted changes, so a capture that shows more than its commit says which. Leaves out .flowmap/
+ * and the files in "ignoreChanges", which a tool rewrites when the app starts.
+ */
+export function uncommittedFiles(root: string): string[] {
+  const skip = [".flowmap", ...readConfig(root).ignoreChanges].map((path) => `:(exclude)${path}`);
   try {
-    return execFileSync("git", ["-C", root, "status", "--porcelain", "--", ".", ":(exclude).flowmap"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim().length > 0;
+    return execFileSync("git", ["-C", root, "status", "--porcelain", "--untracked-files=all", "--", ".", ...skip], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => line.slice(3));
   } catch {
-    return false;
+    return [];
   }
 }
 
@@ -163,7 +172,7 @@ export async function shoot(browser: Browser, root: string, state: State, base: 
 }
 
 /** Runs `run` on each item, at most `limit` at a time, and returns the results in the items' order. */
-export async function inParallel<T, R>(items: T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> {
+async function inParallel<T, R>(items: T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array<R>(items.length);
   let next = 0;
   const worker = async () => {
@@ -177,34 +186,103 @@ export async function inParallel<T, R>(items: T[], limit: number, run: (item: T)
 }
 
 /** How many states Flowmap captures at the same time, each with all its widths. */
-export const AT_ONCE = 4;
+const AT_ONCE = 4;
+
+/** The longest a recipe's setup or session command may run. */
+const COMMAND_TIMEOUT_MS = 5 * 60_000;
+
+/** Runs a recipe's setup or session command in the project's folder, with FLOWMAP_BASE_URL set to the app's address, and returns what it printed. */
+function runCommand(root: string, command: string, what: string, base: URL): Promise<string> {
+  return new Promise((done, fail) => {
+    exec(command, { cwd: root, env: { ...process.env, FLOWMAP_BASE_URL: base.origin }, timeout: COMMAND_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
+      if (!error) return done(stdout);
+      const said = (stderr || stdout).trim().split("\n").slice(-8).join("\n");
+      const how = error.killed ? `did not finish in ${COMMAND_TIMEOUT_MS / 60_000} minutes` : `failed with exit code ${error.code ?? "unknown"}`;
+      fail(new FlowmapError(`The ${what} ${how}: ${command}${said ? `\n${said}` : ""}`));
+    });
+  });
+}
+
+/**
+ * The cookies a session command printed: one name=value on each line, such as sid=abc123. Blank lines are skipped. A line may
+ * end with cookie attributes after a semicolon, as in a Set-Cookie header; Flowmap ignores them.
+ */
+export function parseSession(output: string, command: string): CookieInput[] {
+  const cookies = output.split("\n").map((line) => line.trim()).filter(Boolean).map((line) => {
+    const pair = (line.split(";")[0] ?? "").trim(), at = pair.indexOf("=");
+    if (at < 1) throw new FlowmapError(`The session command must print one cookie on each line as name=value, but printed "${line.slice(0, 80)}": ${command}`);
+    return { name: pair.slice(0, at).trim(), value: pair.slice(at + 1).trim() };
+  });
+  if (!cookies.length) throw new FlowmapError(`The session command printed no cookies. It must print one cookie on each line as name=value: ${command}`);
+  return cookies;
+}
+
+/** Runs captures one call at a time, so two different setups never change the app's data at the same time. */
+let turn: Promise<unknown> = Promise.resolve();
+export function oneAtATime<T>(run: () => Promise<T>): Promise<T> {
+  const result = turn.then(run);
+  turn = result.catch(() => undefined);
+  return result;
+}
+
+/**
+ * Prepares states and captures them, one setup at a time: states with the same setup form a group, the group's setup runs once
+ * just before its states, then each session command runs once, and the group's states are captured several at a time with
+ * the cookies their session printed. Results keep the states' order.
+ */
+export async function bySetup<R>(root: string, states: State[], base: URL, run: (state: State, cookies: CookieInput[]) => Promise<R>): Promise<R[]> {
+  const groups = new Map<string, State[]>();
+  for (const state of states) groups.set(state.setup ?? "", [...(groups.get(state.setup ?? "") ?? []), state]);
+  const results = new Map<string, R>();
+  const names = (group: State[]) => group.map((s) => `"${s.id}"`).join(", ");
+  for (const [setup, group] of groups) {
+    if (setup) await runCommand(root, setup, `setup of ${names(group)}`, base);
+    const sessions = new Map<string, CookieInput[]>();
+    for (const command of new Set(group.flatMap((s) => (s.session ? [s.session] : [])))) {
+      const users = group.filter((s) => s.session === command);
+      sessions.set(command, parseSession(await runCommand(root, command, `session command of ${names(users)}`, base), command));
+    }
+    const done = await inParallel(group, AT_ONCE, (state) => run(state, (state.session && sessions.get(state.session)) || []));
+    group.forEach((state, at) => results.set(state.id, done[at] as R));
+  }
+  return states.map((state) => results.get(state.id) as R);
+}
 
 /**
  * Captures one state at each width and files it in the store under the current commit, or live's commit with `live`.
- * The agent has already prepared the state (seeded data, started the app, made a test session).
+ * Flowmap runs the recipe's setup, then its session command, and opens the page with the cookies the session printed.
  */
-export async function capture(root: string, input: CaptureInput, shared?: Browser): Promise<CaptureResult> {
+export function capture(root: string, input: CaptureInput): Promise<CaptureResult> {
+  return oneAtATime(async () => {
+    const { states } = readStates(root);
+    const state = states.find((s) => s.id === input.state);
+    if (!state) throw new FlowmapError(`No valid recipe with id "${input.state}". Recipes: ${states.map((s) => s.id).join(", ") || "none"}. Call flowmap_states to see recipes that need repair.`);
+    if (input.live && input.variant) throw new FlowmapError("A capture is either of live or of a version to choose from, not both.");
+    const base = baseOf(input.baseUrl);
+    const browser = await launch();
+    try {
+      const [result] = await bySetup(root, [state], base, (s, cookies) => captureState(root, input, s, cookies, browser));
+      return result as CaptureResult;
+    } finally {
+      await browser.close();
+    }
+  });
+}
+
+/** Captures a state that is already prepared, in an open browser, with its session's cookies, and files it. */
+async function captureState(root: string, input: CaptureInput, state: State, session: CookieInput[], browser: Browser): Promise<CaptureResult> {
   const config = readConfig(root);
-  const { states } = readStates(root);
-  const state = states.find((s) => s.id === input.state);
-  if (!state) throw new FlowmapError(`No valid recipe with id "${input.state}". Recipes: ${states.map((s) => s.id).join(", ") || "none"}. Call flowmap_states to see recipes that need repair.`);
-  if (input.live && input.variant) throw new FlowmapError("A capture is either of live or of a version to choose from, not both.");
   const commit = input.live ? resolveRef(root, config.liveRef) : resolveRef(root, "HEAD");
   if (!commit) {
     throw new FlowmapError(input.live ? `Live's ref "${config.liveRef}" does not resolve to a commit. Fetch it, or set "liveRef" in .flowmap/config.json.` : "The project has no commit yet. Commit once, then capture.");
   }
   const base = baseOf(input.baseUrl);
   const at = { commit, branch: input.live ? config.liveRef : currentBranch(root) };
-  const uncommitted = input.live ? false : hasUncommitted(root);
-  const browser = shared ?? (await launch());
-  let shots: Shot[];
-  try {
-    // A version is captured from its own address; the rest of the recipe (steps, widths) applies as it is.
-    const shown = input.variant?.route ? { ...state, route: input.variant.route } : state;
-    shots = await shoot(browser, root, shown, base, input.cookies, input.widths ?? state.widths ?? config.widths);
-  } finally {
-    if (!shared) await browser.close();
-  }
+  const changes = input.live ? [] : uncommittedFiles(root);
+  const uncommitted = changes.length > 0;
+  // A version is captured from its own address; the rest of the recipe (steps, widths) applies as it is.
+  const shown = input.variant?.route ? { ...state, route: input.variant.route } : state;
+  const shots = await shoot(browser, root, shown, base, [...(input.cookies ?? []), ...session], input.widths ?? state.widths ?? config.widths);
   const variant = input.variant;
   const results = shots.map((s): WidthResult => {
     if (variant) {
@@ -219,20 +297,23 @@ export async function capture(root: string, input: CaptureInput, shared?: Browse
   });
   // Every width is filed, so the version is built: the viewer swaps its building frame for the pictures at once.
   if (variant) markBuilding(root, variant, commit, state.id, false);
-  return { state: state.id, commit, branch: at.branch, uncommitted, widths: results };
+  return { state: state.id, commit, branch: at.branch, uncommitted, changes, widths: results };
 }
 
-/** Captures several states, or every state, in one browser, several at a time. */
-export async function captureMany(root: string, input: Omit<CaptureInput, "state" | "variant" | "live"> & { states?: string[] }): Promise<CaptureResult[]> {
-  const all = readStates(root).states.map((s) => s.id);
-  const ids = input.states?.length ? input.states : all;
-  const unknown = ids.filter((id) => !all.includes(id));
-  if (unknown.length) throw new FlowmapError(`No valid recipe with id ${unknown.map((u) => `"${u}"`).join(", ")}. Recipes: ${all.join(", ") || "none"}.`);
-  if (!ids.length) throw new FlowmapError("There are no state recipes to capture. Write recipes first.");
-  const browser = await launch();
-  try {
-    return await inParallel(ids, AT_ONCE, (state) => capture(root, { ...input, state }, browser));
-  } finally {
-    await browser.close();
-  }
+/** Captures several states, or every state, in one browser: one setup at a time, and the states of each setup several at a time. */
+export function captureMany(root: string, input: Omit<CaptureInput, "state" | "variant" | "live"> & { states?: string[] }): Promise<CaptureResult[]> {
+  return oneAtATime(async () => {
+    const all = readStates(root).states;
+    const ids = input.states?.length ? input.states : all.map((s) => s.id);
+    const unknown = ids.filter((id) => !all.some((s) => s.id === id));
+    if (unknown.length) throw new FlowmapError(`No valid recipe with id ${unknown.map((u) => `"${u}"`).join(", ")}. Recipes: ${all.map((s) => s.id).join(", ") || "none"}.`);
+    if (!ids.length) throw new FlowmapError("There are no state recipes to capture. Write recipes first.");
+    const base = baseOf(input.baseUrl);
+    const browser = await launch();
+    try {
+      return await bySetup(root, all.filter((s) => ids.includes(s.id)), base, (state, cookies) => captureState(root, { ...input, state: state.id }, state, cookies, browser));
+    } finally {
+      await browser.close();
+    }
+  });
 }

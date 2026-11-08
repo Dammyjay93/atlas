@@ -61,14 +61,14 @@ For clients that start MCP servers themselves, `flowmap mcp` serves the same too
 
 | Command | What it does |
 | --- | --- |
-| `flowmap` | Sets up the project if it is new, starts Flowmap and opens the viewer. `--no-open` keeps the browser closed |
+| `flowmap` | In a terminal: sets up the project if it is new, starts Flowmap and opens the viewer, and runs until you press Ctrl+C. If Flowmap already runs for the project, it opens the viewer. Started by a program, such as a coding agent, it prints the usage instead; `flowmap start` starts Flowmap anyway. `--no-open` keeps the browser closed |
 | `flowmap init` | Sets up `.flowmap/` in the project |
 | `flowmap serve` | Starts Flowmap on your computer: the viewer at `/` and the MCP endpoint at `/mcp`. `--port` changes the port from 4317 |
 | `flowmap connect` | Shows how to connect each coding agent. `--write <claude\|codex\|cursor>` adds Flowmap to that agent |
 | `flowmap states` | Lists state recipes, recipes that need repair, and the live and branch commits. Add `--json` for structured output |
 | `flowmap setup` | For your coding agent: sets Flowmap up, starts it in the background on a free port, opens the viewer and prints what the agent does next |
-| `flowmap capture [<state>...] --base-url <url>` | Captures every state, or the ones named, at the current commit, in one browser and several at a time. `--cookie name=value` passes a test session; `--width` overrides the widths; `--live`, for one state, files the capture under live's commit, for an app started from a copy of the project at live |
-| `flowmap check --base-url <url>` | Captures every state at your current code and lists the screens that changed since before your change. `--cookie name=value` passes a test session |
+| `flowmap capture [<state>...] --base-url <url>` | Captures every state, or the ones named, at the current commit, in one browser. It runs each recipe's `setup` and `session` first, one setup at a time, and captures the states of each setup several at a time. `--cookie name=value` adds a cookie to every state; `--width` overrides the widths; `--live`, for one state, files the capture under live's commit, for an app started from a copy of the project at live |
+| `flowmap check --base-url <url>` | Captures every state at your current code and lists the screens that changed since before your change. It runs each recipe's `setup` and `session` as `capture` does. `--cookie name=value` adds a cookie to every state |
 | `flowmap tasks` | Lists the changes you asked for. `--status` picks one status; add `--json` for structured output |
 | `flowmap capture <state> --base-url <url> --variant <set>/<name> --note <text> --route <path>` | Captures a version of a screen for the person to choose from, from the address that shows it, filed under its set |
 | `flowmap compare <state>` | Compares a state's captures at the current commit with its captures at live. Add `--json` for structured output |
@@ -107,7 +107,12 @@ A recipe tells an agent how to reach one state. Agents write a recipe when they 
 }
 ```
 
-Flowmap never runs `setup` or `session` itself: the agent runs them before it captures, and passes the session to Flowmap as cookies. Flowmap opens `route` and runs `steps`. `fullPage` captures a long page in full. `leadsTo` draws the flow connectors between screens.
+Before it captures a state, Flowmap runs the recipe's `setup`, then its `session`, as shell commands in the project's folder, with `FLOWMAP_BASE_URL` set to the app's address. Then it opens `route` with the session's cookies and runs `steps`. `fullPage` captures a long page in full. `leadsTo` draws the flow connectors between screens.
+
+- `setup` puts the app's data in the state the screen needs. It must reset everything the screen depends on, because opening a page can change data, and running it twice must give the same state.
+- `session` signs in a test account and prints its cookies, one `name=value` on each line, such as `sid=abc123`. Text after a `;` on a line, such as Set-Cookie attributes, is ignored. The usual session command is a small script that calls the app's own session code for a test account.
+- States with the same `setup` form a group. Flowmap runs the group's setup once, then each of its session commands once, then captures its states several at a time. It never runs two different setups at the same time, so states that need data in states that conflict get different setup commands and are captured one after the other.
+- Each command may run for 5 minutes. If one fails, the capture stops and shows the command and the end of its output.
 
 ## Compare with live
 
@@ -144,6 +149,7 @@ A task moves from `open` to `in-progress` to `ready-for-review`, which the agent
 | `liveUrl` | The live site's address |
 | `widths` | Screen widths to capture, in CSS pixels. Default: 1440 and 390 |
 | `hide` | CSS selectors removed before each capture, such as a development overlay |
+| `ignoreChanges` | Files a tool rewrites when the app starts, such as `AGENTS.md` under `next dev`. Their uncommitted changes do not mark captures as uncommitted. Every capture with uncommitted changes names the changed files |
 | `time` | A fixed time for the browser's clock during capture. It keeps dates the page works out itself the same between captures. Dates the server works out, such as "Posted 3 days ago", follow the server's clock: seed them relative to the current time in the recipe's `setup` |
 
 Flowmap captures with Playwright's browser. When that browser is not installed, Flowmap uses Google Chrome. If neither is available, run `npx playwright install chromium-headless-shell`.

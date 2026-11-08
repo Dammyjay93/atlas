@@ -20,7 +20,8 @@ The person you work with builds this product by prompting coding agents like you
 
 - A state is one way a screen can look: a page, a filled form, an empty list, an error, a menu open.
 - Each state has a recipe in .flowmap/states/<id>.json. The recipe says how to reach the state.
-- You prepare each state: seed data, start the app at the right commit, make a test session. You have the code, so you can do this for any state.
+- You write each recipe's setup command, which puts the data in the state, and its session command, which signs in a test account. Flowmap runs them before it captures the state. You have the code, so you can do this for any state.
+- You start the app.
 - Flowmap resolves live and the branch from git refs on every call. Never write a commit into a recipe or the settings.
 
 Your part:
@@ -55,31 +56,51 @@ One file for each state: .flowmap/states/<id>.json. The id uses lowercase letter
 
 - name: what a person calls the state, in plain words.
 - area and page: where it sits in the product. Screens with the same page are grouped together.
-- route: the path to open, starting with /.
-- setup: a command you run to prepare the data, if the state needs any. Make it repeatable: running it twice gives the same state.
-- session: a command that prints a test session, if the state needs sign-in. Use test accounts only, never a real person's account.
-- steps: browser actions after the page opens, in order. Each step is one of { "click": selector }, { "fill": selector, "value": text }, { "press": key } or { "waitFor": selector }.
+- route: the path to open, starting with /. For a page with an id in its path, such as /orders/[id], make setup create the record with a fixed id, or find one that always exists, and put that id in the route.
+- setup: a shell command that puts the app's data in the state the screen needs. Flowmap runs it in the project's folder just before it captures the state. Make it reset everything the screen depends on, not only add to it: opening a page can change data, such as a page that saves progress or a notice that is dismissed once seen, and the next capture must start from the same data. Running it twice gives the same state.
+- session: a shell command that signs in a test account and prints its session cookies, one name=value on each line, such as sid=abc123. Flowmap runs it after setup and opens the page with those cookies. Leave it out for screens a signed-out person sees.
+- steps: browser actions after the page opens, in order. Each step is one of { "click": selector }, { "fill": selector, "value": text }, { "press": key } or { "waitFor": selector }. Use steps to open a tab, menu, dialog or drawer.
 - widths: screen widths in pixels, if they differ from the project's settings.
+- fullPage: true captures the whole length of a page that scrolls.
 - leadsTo: the states a person reaches from this one, and the action that takes them there. Flowmap draws these as the flow between screens.
 
-Write one recipe for each state a person can see, including empty, error and loading states where you can hold them still.
+Write a recipe for every state a person can see, not only the main screens:
+- every route, including pages that need sign-in, a role or a plan;
+- on each page, each tab, menu, dialog, drawer and expanded panel;
+- each step of a flow, such as each step of sign-up or checkout;
+- each empty, error and loading state you can hold still, and each plan, role or setting that changes the page.
+Do not leave out a screen because it needs sign-in or data: write a setup and a session command for it.
+
+How Flowmap runs setup and session:
+- States with the same setup command form a group. Flowmap runs the group's setup once, then each of its session commands once, then captures its states several at a time. Then it goes on to the next group.
+- Flowmap never runs two different setups at the same time. So states that need data in states that conflict, such as "still in set-up" and "set-up finished", each get their own setup command, and Flowmap captures them one after the other.
+- If capturing one state changes data that another state in its group needs, give that state its own setup command, such as the same script with another argument.
+- Both commands get FLOWMAP_BASE_URL, the app's address, and run in the project's folder.
+- Use only test data and test accounts on a local or test database. Never use a real person's account or production data.
+
+How to write a session command:
+An app with sign-in already has code that makes a session: the function its sign-in route calls once the password or the email link checks out. Write a small script, such as .flowmap/session.ts, that:
+1. Finds or creates a test account, such as test@example.com, in the local test database.
+2. Calls the app's own session code for that account, the same function the sign-in route calls, so the session is real.
+3. Prints the session cookie as name=value, with the cookie name the app sets.
+Run the script with the app's own tools and environment, such as "pnpm tsx .flowmap/session.ts", and make it refuse any database but the test one. If the app's session code cannot run outside the server, sign in through the running app instead: post to its sign-in or test sign-in route at FLOWMAP_BASE_URL and print the cookie from the response. Never write a real password into a recipe.
+
 Call flowmap_states after you write or change recipes, and fix anything it reports.`,
 
   capture: `How to capture a state
 
-1. Prepare the state. Run the recipe's setup to seed the data, and start the app if it is not running.
-2. If the state needs sign-in, run the recipe's session command and pass the cookies it gives you.
-3. Call flowmap_capture with the recipe id and the address of the running app (baseUrl).
-4. Look at the pictures it returns. If the page shows the wrong state, fix the setup, the session or the steps, and capture again.
+1. Start the app if it is not running.
+2. Call flowmap_capture with the recipe id and the address of the running app (baseUrl). Flowmap runs the recipe's setup, then its session command, and opens the page with the session's cookies. To capture every state in one run, use the command line: flowmap capture --base-url <address>.
+3. Look at the pictures it returns. If the page shows the wrong state, fix the setup, the session or the steps, and capture again.
 
-Flowmap saves a picture and an HTML snapshot for each width in .flowmap/store/<commit>/<state>/. The commit comes from git, so commit your work before you capture when you can; a capture with uncommitted changes is marked as such.
+Flowmap saves a picture and an HTML snapshot for each width in .flowmap/store/<commit>/<state>/. The commit comes from git, so commit your work before you capture when you can; a capture with uncommitted changes is marked as such and names the changed files. If a tool rewrites a tracked file when the app starts, such as AGENTS.md under next dev, list that file in "ignoreChanges" in .flowmap/config.json, so its change does not count.
 
 For captures that stay the same between runs:
 - Seed the same data every time.
 - If the app shows relative dates, such as "3 days ago", make the recipe's setup seed those dates relative to the current time, so they read the same on every run. Setting "time" in .flowmap/config.json only freezes the browser's clock; dates the server works out still follow the server's clock.
 - Add selectors to "hide" in .flowmap/config.json for anything that is not part of the product, such as a development overlay.
 
-If the result says landedOn, the app sent the browser somewhere other than the recipe's route, for example to a sign-in page. Check the session and the setup.
+If the result says landedOn, the app sent the browser somewhere other than the recipe's route, for example to a sign-in page, or to a guided tour or an onboarding step that the account has not finished. Check the session and the setup. The app's own end-to-end tests often show how to put an account past such a step.
 If the result's status is not 200, the page answered with an error, for example 401 when the session cookie is wrong.`,
 
   compare: `How to compare with live

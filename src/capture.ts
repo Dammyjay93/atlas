@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chromium, type Browser } from "playwright";
-import { currentBranch, readConfig, resolveRef, AtlasError } from "./project.js";
+import { currentBranch, readConfig, resolveRef, FlowmapError } from "./project.js";
 import { snapshotPage } from "./snapshot.js";
 import { readStates, type State } from "./states.js";
 import { saveCapture, type Entry } from "./store.js";
@@ -58,17 +58,17 @@ export async function launch(): Promise<Browser> {
     try {
       return await chromium.launch({ channel: "chrome" });
     } catch {
-      throw new AtlasError(
-        `Atlas could not start a browser. Install Google Chrome, or run "npx playwright install chromium-headless-shell". (${(bundled as Error).message.split("\n")[0]})`
+      throw new FlowmapError(
+        `Flowmap could not start a browser. Install Google Chrome, or run "npx playwright install chromium-headless-shell". (${(bundled as Error).message.split("\n")[0]})`
       );
     }
   }
 }
 
-/** True when the project has uncommitted changes outside .atlas/, so a capture shows more than its commit. */
+/** True when the project has uncommitted changes outside .flowmap/, so a capture shows more than its commit. */
 export function hasUncommitted(root: string): boolean {
   try {
-    return execFileSync("git", ["-C", root, "status", "--porcelain", "--", ".", ":(exclude).atlas"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim().length > 0;
+    return execFileSync("git", ["-C", root, "status", "--porcelain", "--", ".", ":(exclude).flowmap"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim().length > 0;
   } catch {
     return false;
   }
@@ -92,7 +92,7 @@ export function baseOf(baseUrl: string): URL {
   try {
     return new URL(baseUrl);
   } catch {
-    throw new AtlasError(`baseUrl "${baseUrl}" is not a web address, such as http://localhost:3000.`);
+    throw new FlowmapError(`baseUrl "${baseUrl}" is not a web address, such as http://localhost:3000.`);
   }
 }
 
@@ -144,8 +144,8 @@ export async function shoot(browser: Browser, root: string, state: State, base: 
       }
     }
   } catch (error) {
-    if (error instanceof AtlasError) throw error;
-    throw new AtlasError(`Capturing "${state.id}" failed: ${(error as Error).message.split("\n")[0]}`);
+    if (error instanceof FlowmapError) throw error;
+    throw new FlowmapError(`Capturing "${state.id}" failed: ${(error as Error).message.split("\n")[0]}`);
   }
   return shots;
 }
@@ -158,11 +158,11 @@ export async function capture(root: string, input: CaptureInput): Promise<Captur
   const config = readConfig(root);
   const { states } = readStates(root);
   const state = states.find((s) => s.id === input.state);
-  if (!state) throw new AtlasError(`No valid recipe with id "${input.state}". Recipes: ${states.map((s) => s.id).join(", ") || "none"}. Call atlas_states to see recipes that need repair.`);
-  if (input.live && input.variant) throw new AtlasError("A capture is either of live or of a version to choose from, not both.");
+  if (!state) throw new FlowmapError(`No valid recipe with id "${input.state}". Recipes: ${states.map((s) => s.id).join(", ") || "none"}. Call flowmap_states to see recipes that need repair.`);
+  if (input.live && input.variant) throw new FlowmapError("A capture is either of live or of a version to choose from, not both.");
   const commit = input.live ? resolveRef(root, config.liveRef) : resolveRef(root, "HEAD");
   if (!commit) {
-    throw new AtlasError(input.live ? `Live's ref "${config.liveRef}" does not resolve to a commit. Fetch it, or set "liveRef" in .atlas/config.json.` : "The project has no commit yet. Commit once, then capture.");
+    throw new FlowmapError(input.live ? `Live's ref "${config.liveRef}" does not resolve to a commit. Fetch it, or set "liveRef" in .flowmap/config.json.` : "The project has no commit yet. Commit once, then capture.");
   }
   const base = baseOf(input.baseUrl);
   const at = { commit, branch: input.live ? config.liveRef : currentBranch(root) };
@@ -185,7 +185,7 @@ export async function capture(root: string, input: CaptureInput): Promise<Captur
     }
     const entry = { hash: createHash("sha256").update(s.png).digest("hex"), route: s.route, ...(s.landedOn ? { landedOn: s.landedOn } : {}), status: s.status, capturedAt: s.capturedAt, uncommitted };
     const previous = saveCapture(root, at, state.id, s.width, { png: s.png, html: s.html, layout: s.layout }, entry);
-    const dir = `.atlas/store/${commit}/${state.id}/${s.width}`;
+    const dir = `.flowmap/store/${commit}/${state.id}/${s.width}`;
     return { width: s.width, entry: { png: `${dir}.png`, html: `${dir}.html`, layout: `${dir}.layout.json`, ...entry }, changed: previous?.hash !== entry.hash, preview: s.preview };
   });
   // Every width is filed, so the version is built: the viewer swaps its building frame for the pictures at once.

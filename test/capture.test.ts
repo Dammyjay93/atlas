@@ -37,13 +37,13 @@ afterAll(() => new Promise<void>((done) => app.close(() => done())));
 
 let project: string;
 beforeEach(() => {
-  project = mkdtempSync(join(tmpdir(), "atlas-capture-"));
+  project = mkdtempSync(join(tmpdir(), "flowmap-capture-"));
   git(project, "init", "-q", "-b", "main");
   git(project, "config", "user.email", "test@example.com");
   git(project, "config", "user.name", "Test");
   git(project, "commit", "-q", "--allow-empty", "-m", "First");
   execFileSync("node", [CLI, "init"], { cwd: project });
-  const recipe = (r: Record<string, unknown>) => writeFileSync(join(project, ".atlas", "states", `${r.id}.json`), JSON.stringify({ widths: [400], ...r }));
+  const recipe = (r: Record<string, unknown>) => writeFileSync(join(project, ".flowmap", "states", `${r.id}.json`), JSON.stringify({ widths: [400], ...r }));
   recipe({ id: "cart", name: "Cart", route: "/cart" });
   recipe({ id: "cart-code", name: "Cart with a code", route: "/cart", steps: [{ click: "button" }, { waitFor: "text=Code applied" }] });
   recipe({ id: "account", name: "Account", route: "/account" });
@@ -73,7 +73,7 @@ describe("capture", () => {
     expect(html).toContain("rgb(10, 20, 30)");
     expect(html).not.toContain("<script");
     expect(html).not.toContain('rel="stylesheet"');
-    const manifest = JSON.parse(readFileSync(join(project, ".atlas", "store", commit(), "manifest.json"), "utf8"));
+    const manifest = JSON.parse(readFileSync(join(project, ".flowmap", "store", commit(), "manifest.json"), "utf8"));
     expect(Object.keys(manifest.states.cart)).toEqual(["400"]);
   });
 
@@ -97,7 +97,7 @@ describe("capture", () => {
   });
 
   it("freezes the page's clock at the time in the settings", async () => {
-    const file = join(project, ".atlas", "config.json");
+    const file = join(project, ".flowmap", "config.json");
     writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, "utf8")), time: "2026-01-02T03:04:05.000Z" }));
     const result = await capture(project, { state: "clock", baseUrl });
     expect(snapshot(result)).toContain("2026-01-02T03:04:05.000Z");
@@ -113,12 +113,12 @@ describe("capture", () => {
   });
 });
 
-describe("atlas_capture", () => {
+describe("flowmap_capture", () => {
   it("returns the summary and a picture the agent can look at", async () => {
     const client = new Client({ name: "test", version: "0" });
     await client.connect(new StdioClientTransport({ command: "node", args: [CLI, "mcp"], cwd: project }));
     try {
-      const result = await client.callTool({ name: "atlas_capture", arguments: { state: "cart", baseUrl } });
+      const result = await client.callTool({ name: "flowmap_capture", arguments: { state: "cart", baseUrl } });
       const content = result.content as { type: string; text?: string; mimeType?: string }[];
       expect(JSON.parse(content[0]?.text ?? "{}").widths[0].width).toBe(400);
       expect(content[1]).toMatchObject({ type: "image", mimeType: "image/jpeg" });

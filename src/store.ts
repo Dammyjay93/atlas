@@ -7,7 +7,7 @@ import type { LayoutItem } from "./text-map.js";
 const EntrySchema = z.object({
   png: z.string(),
   html: z.string(),
-  /** The page's visible elements and their boxes, for naming and outlining what changed. Captures made before Atlas recorded it have none. */
+  /** The page's visible elements and their boxes, for naming and outlining what changed. Captures made before Flowmap recorded it have none. */
   layout: z.string().optional(),
   hash: z.string(),
   route: z.string(),
@@ -15,7 +15,7 @@ const EntrySchema = z.object({
   landedOn: z.string().optional(),
   status: z.number().int(),
   capturedAt: z.string(),
-  /** True when the project had uncommitted changes outside .atlas/, so the capture shows more than the commit. */
+  /** True when the project had uncommitted changes outside .flowmap/, so the capture shows more than the commit. */
   uncommitted: z.boolean()
 });
 export type Entry = z.infer<typeof EntrySchema>;
@@ -27,7 +27,7 @@ const ManifestSchema = z.object({
 });
 export type Manifest = z.infer<typeof ManifestSchema>;
 
-export const storeDir = (root: string, commit: string) => join(root, ".atlas", "store", commit);
+export const storeDir = (root: string, commit: string) => join(root, ".flowmap", "store", commit);
 
 export function readManifest(root: string, commit: string): Manifest | null {
   const file = join(storeDir(root, commit), "manifest.json");
@@ -45,9 +45,9 @@ export function saveCapture(
   files: { png: Buffer; html: string; layout: LayoutItem[] },
   entry: Omit<Entry, "png" | "html" | "layout">
 ): Entry | null {
-  const png = join(".atlas", "store", at.commit, state, `${width}.png`);
-  const html = join(".atlas", "store", at.commit, state, `${width}.html`);
-  const layout = join(".atlas", "store", at.commit, state, `${width}.layout.json`);
+  const png = join(".flowmap", "store", at.commit, state, `${width}.png`);
+  const html = join(".flowmap", "store", at.commit, state, `${width}.html`);
+  const layout = join(".flowmap", "store", at.commit, state, `${width}.layout.json`);
   mkdirSync(dirname(join(root, png)), { recursive: true });
   writeFileSync(join(root, png), files.png);
   writeFileSync(join(root, html), files.html);

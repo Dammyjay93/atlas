@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { compareEntries, type Comparison } from "./compare.js";
 import { connectInfo } from "./connect.js";
 import { overview } from "./overview.js";
-import { AtlasError, readConfig } from "./project.js";
+import { FlowmapError, readConfig } from "./project.js";
 import type { Agent } from "./serve.js";
 import { readManifest, type Manifest } from "./store.js";
 import { beforeOf, readTasks } from "./tasks.js";
@@ -28,7 +28,7 @@ function newestManifest(root: string, head: string | null): Manifest | null {
     const own = readManifest(root, head);
     if (own) return own;
   }
-  const dir = join(root, ".atlas", "store");
+  const dir = join(root, ".flowmap", "store");
   if (!existsSync(dir)) return null;
   let best: { manifest: Manifest; at: string } | null = null;
   for (const commit of readdirSync(dir)) {
@@ -60,14 +60,14 @@ export function viewerData(root: string, port: number, agents: Agent[] = []) {
   const picture = (png: string, width: string) => {
     const size = pngSize(join(root, png));
     const scale = size ? size.width / Number(width) : 2;
-    return { png: "/" + png.replace(/^\.atlas\//, ""), height: size ? Math.round(size.height / scale) : Number(width) >= 768 ? 900 : 844 };
+    return { png: "/" + png.replace(/^\.flowmap\//, ""), height: size ? Math.round(size.height / scale) : Number(width) >= 768 ? 900 : 844 };
   };
   type Shot = ReturnType<typeof picture> & { layout?: string; landedOn?: string; uncommitted: boolean; capturedAt: string; live?: ReturnType<typeof picture>; compare?: Comparison };
   const shots: Record<string, Record<string, Shot>> = {};
   for (const [state, byWidth] of Object.entries(manifest?.states ?? {})) {
     for (const [width, entry] of Object.entries(byWidth)) {
       if (!existsSync(join(root, entry.png))) continue;
-      const layout = entry.layout && existsSync(join(root, entry.layout)) ? { layout: "/" + entry.layout.replace(/^\.atlas\//, "") } : {};
+      const layout = entry.layout && existsSync(join(root, entry.layout)) ? { layout: "/" + entry.layout.replace(/^\.flowmap\//, "") } : {};
       const shot: Shot = { ...picture(entry.png, width), ...layout, ...(entry.landedOn ? { landedOn: entry.landedOn } : {}), uncommitted: entry.uncommitted, capturedAt: entry.capturedAt };
       if (liveManifest) {
         const live = liveManifest.states[state]?.[width];
@@ -77,7 +77,7 @@ export function viewerData(root: string, port: number, agents: Agent[] = []) {
           if (usable) shot.live = picture(usable.png, width);
         } catch (error) {
           // A pair that cannot be compared, such as pictures of different widths, shows without a comparison.
-          if (!(error instanceof AtlasError)) throw error;
+          if (!(error instanceof FlowmapError)) throw error;
         }
       }
       (shots[state] ??= {})[width] = shot;
@@ -99,15 +99,15 @@ export function viewerData(root: string, port: number, agents: Agent[] = []) {
       set: set.set,
       options: set.options.map((o) => ({
         name: o.name, note: o.note, commit: o.commit, ...(o.building ? { building: o.building } : {}),
-        shots: Object.fromEntries(Object.entries(o.shots).map(([state, byWidth]) => [state, Object.fromEntries(Object.entries(byWidth).filter(([, f]) => existsSync(join(root, f.png))).map(([w, f]) => [w, { ...picture(f.png, w), layout: "/" + f.layout.replace(/^\.atlas\//, "") }]))]))
+        shots: Object.fromEntries(Object.entries(o.shots).map(([state, byWidth]) => [state, Object.fromEntries(Object.entries(byWidth).filter(([, f]) => existsSync(join(root, f.png))).map(([w, f]) => [w, { ...picture(f.png, w), layout: "/" + f.layout.replace(/^\.flowmap\//, "") }]))]))
       }))
     })),
     tasks: readTasks(root).tasks.map((t) => {
       const before = beforeOf(root, t);
       return {
         ...t,
-        before: before && existsSync(join(root, before.png)) ? "/" + before.png.replace(/^\.atlas\//, "") : null,
-        after: t.after && existsSync(join(root, t.after.png)) ? { ...t.after, png: "/" + t.after.png.replace(/^\.atlas\//, "") } : null
+        before: before && existsSync(join(root, before.png)) ? "/" + before.png.replace(/^\.flowmap\//, "") : null,
+        after: t.after && existsSync(join(root, t.after.png)) ? { ...t.after, png: "/" + t.after.png.replace(/^\.flowmap\//, "") } : null
       };
     }),
     connect: connectInfo(`http://localhost:${port}/mcp`),

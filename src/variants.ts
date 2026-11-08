@@ -33,7 +33,7 @@ const OptionSchema = z.object({
 const SetSchema = z.object({ set: z.string(), options: z.array(OptionSchema) });
 export type VariantSet = z.infer<typeof SetSchema>;
 
-const setsDir = (root: string) => join(root, ".atlas", "store", "variants");
+const setsDir = (root: string) => join(root, ".flowmap", "store", "variants");
 const setFile = (root: string, set: string) => join(setsDir(root), set, "set.json");
 
 export function readVariantSets(root: string): VariantSet[] {
@@ -80,7 +80,7 @@ export function saveVariant(
   files: { png: Buffer; html: string; layout: LayoutItem[] },
   capturedAt: string
 ): { png: string; html: string; layout: string } {
-  const dir = join(".atlas", "store", "variants", variant.set, variant.name, state);
+  const dir = join(".flowmap", "store", "variants", variant.set, variant.name, state);
   mkdirSync(join(root, dir), { recursive: true });
   const paths = { png: join(dir, `${width}.png`), html: join(dir, `${width}.html`), layout: join(dir, `${width}.layout.json`) };
   writeFileSync(join(root, paths.png), files.png);

@@ -31,13 +31,13 @@ afterAll(() => new Promise<void>((done) => app.close(() => done())));
 let project: string;
 let running: Running;
 beforeEach(async () => {
-  project = mkdtempSync(join(tmpdir(), "atlas-variants-"));
+  project = mkdtempSync(join(tmpdir(), "flowmap-variants-"));
   git(project, "init", "-q", "-b", "main");
   git(project, "config", "user.email", "test@example.com");
   git(project, "config", "user.name", "Test");
   git(project, "commit", "-q", "--allow-empty", "-m", "First");
   execFileSync("node", [CLI, "init"], { cwd: project });
-  writeFileSync(join(project, ".atlas", "states", "checkout.json"), JSON.stringify({ id: "checkout", name: "Checkout", route: "/checkout", widths: [400] }));
+  writeFileSync(join(project, ".flowmap", "states", "checkout.json"), JSON.stringify({ id: "checkout", name: "Checkout", route: "/checkout", widths: [400] }));
   running = await serve(project, 0);
 });
 afterEach(async () => {

@@ -1,4 +1,4 @@
 node_modules/
 dist/
-.atlas/store/
+.flowmap/store/
 .DS_Store

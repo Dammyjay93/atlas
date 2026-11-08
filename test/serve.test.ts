@@ -37,13 +37,13 @@ afterAll(() => new Promise<void>((done) => app.close(() => done())));
 let project: string;
 let running: Running;
 beforeEach(async () => {
-  project = mkdtempSync(join(tmpdir(), "atlas-serve-"));
+  project = mkdtempSync(join(tmpdir(), "flowmap-serve-"));
   git(project, "init", "-q", "-b", "main");
   git(project, "config", "user.email", "test@example.com");
   git(project, "config", "user.name", "Test");
   git(project, "commit", "-q", "--allow-empty", "-m", "First");
   execFileSync("node", [CLI, "init"], { cwd: project });
-  const recipe = (r: Record<string, unknown>) => writeFileSync(join(project, ".atlas", "states", `${r.id}.json`), JSON.stringify({ widths: [400], ...r }));
+  const recipe = (r: Record<string, unknown>) => writeFileSync(join(project, ".flowmap", "states", `${r.id}.json`), JSON.stringify({ widths: [400], ...r }));
   recipe({ id: "cart", name: "Cart", page: "Shop", route: "/cart", leadsTo: [{ state: "checkout", action: "Check out" }] });
   recipe({ id: "checkout", name: "Checkout", page: "Shop", route: "/checkout" });
   running = await serve(project, 0);
@@ -57,7 +57,7 @@ afterEach(async () => {
 describe("the viewer's data", () => {
   it("lists recipes and the newest captures, with how far they are behind HEAD", async () => {
     await capture(project, { state: "cart", baseUrl: appUrl });
-    const res = await get(running.port, "/api/atlas");
+    const res = await get(running.port, "/api/flowmap");
     const view = JSON.parse(res.body);
     expect(view.states.map((s: { id: string }) => s.id)).toEqual(["cart", "checkout"]);
     expect(view.shown).toEqual({ commit: git(project, "rev-parse", "--short=8", "HEAD"), behind: 0 });
@@ -66,7 +66,7 @@ describe("the viewer's data", () => {
     const png = await get(running.port, view.shots.cart["400"].png);
     expect(png).toMatchObject({ status: 200, type: "image/png" });
     git(project, "commit", "-q", "--allow-empty", "-m", "Second");
-    expect(JSON.parse((await get(running.port, "/api/atlas")).body).shown.behind).toBe(1);
+    expect(JSON.parse((await get(running.port, "/api/flowmap")).body).shown.behind).toBe(1);
   });
 
   it("serves only files inside the capture store", async () => {
@@ -74,20 +74,20 @@ describe("the viewer's data", () => {
   });
 
   it("answers only when the host is this computer", async () => {
-    expect((await get(running.port, "/api/atlas", "evil.example")).status).toBe(403);
+    expect((await get(running.port, "/api/flowmap", "evil.example")).status).toBe(403);
   });
 
   it("lists each agent that connects over MCP", async () => {
-    expect(JSON.parse((await get(running.port, "/api/atlas")).body).agents).toEqual([]);
+    expect(JSON.parse((await get(running.port, "/api/flowmap")).body).agents).toEqual([]);
     const client = new Client({ name: "test-agent", version: "1.2.3" });
     await client.connect(new StreamableHTTPClientTransport(new URL(running.url)));
     await client.close();
-    const { agents } = JSON.parse((await get(running.port, "/api/atlas")).body);
+    const { agents } = JSON.parse((await get(running.port, "/api/flowmap")).body);
     expect(agents).toMatchObject([{ name: "test-agent", version: "1.2.3" }]);
   });
 
   it("serves the viewer and its icons", async () => {
-    expect((await get(running.port, "/")).body).toContain("<title>Atlas</title>");
+    expect((await get(running.port, "/")).body).toContain("<title>Flowmap</title>");
     expect(JSON.parse((await get(running.port, "/icons.json")).body)["monitor-linear"]).toContain("<path");
   });
 });
@@ -99,7 +99,7 @@ describe("the live stream", () => {
         let text = "";
         res.on("data", (c: Buffer) => {
           text += c.toString();
-          if (text.includes(": connected")) writeFileSync(join(project, ".atlas", "states", "cart.json"), JSON.stringify({ id: "cart", name: "Basket", route: "/cart" }));
+          if (text.includes(": connected")) writeFileSync(join(project, ".flowmap", "states", "cart.json"), JSON.stringify({ id: "cart", name: "Basket", route: "/cart" }));
           if (text.includes("event: update")) {
             req.destroy();
             done(text);
@@ -113,9 +113,9 @@ describe("the live stream", () => {
   });
 });
 
-describe("atlas with no command", () => {
-  it("sets up a new project and starts Atlas", async () => {
-    const fresh = mkdtempSync(join(tmpdir(), "atlas-start-"));
+describe("flowmap with no command", () => {
+  it("sets up a new project and starts Flowmap", async () => {
+    const fresh = mkdtempSync(join(tmpdir(), "flowmap-start-"));
     try {
       git(fresh, "init", "-q", "-b", "main");
       const child = spawn("node", [CLI, "--port", "0", "--no-open"], { cwd: fresh });
@@ -125,13 +125,13 @@ describe("atlas with no command", () => {
           seen += c.toString();
           if (seen.includes("Press Ctrl+C")) done(seen);
         });
-        child.on("exit", (code) => fail(new Error(`atlas exited with ${code}: ${seen}`)));
+        child.on("exit", (code) => fail(new Error(`flowmap exited with ${code}: ${seen}`)));
       });
       child.kill();
-      expect(text).toContain("Set up Atlas in");
+      expect(text).toContain("Set up Flowmap in");
       expect(text).toMatch(/is running at http:\/\/localhost:\d+\//);
-      expect(text).toContain("claude mcp add --transport http atlas");
-      expect(existsSync(join(fresh, ".atlas", "config.json"))).toBe(true);
+      expect(text).toContain("claude mcp add --transport http flowmap");
+      expect(existsSync(join(fresh, ".flowmap", "config.json"))).toBe(true);
     } finally {
       rmSync(fresh, { recursive: true, force: true });
     }

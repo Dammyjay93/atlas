@@ -36,7 +36,7 @@ afterAll(() => Promise.all(servers.map((s) => new Promise<void>((done) => s.clos
 /** A project whose live ref is main, with HEAD one commit ahead on a branch. */
 let project: string;
 beforeEach(() => {
-  project = mkdtempSync(join(tmpdir(), "atlas-compare-"));
+  project = mkdtempSync(join(tmpdir(), "flowmap-compare-"));
   git(project, "init", "-q", "-b", "main");
   git(project, "config", "user.email", "test@example.com");
   git(project, "config", "user.name", "Test");
@@ -44,9 +44,9 @@ beforeEach(() => {
   git(project, "checkout", "-q", "-b", "feature");
   git(project, "commit", "-q", "--allow-empty", "-m", "Branch");
   execFileSync("node", [CLI, "init"], { cwd: project });
-  const configFile = join(project, ".atlas", "config.json");
+  const configFile = join(project, ".flowmap", "config.json");
   writeFileSync(configFile, JSON.stringify({ ...JSON.parse(readFileSync(configFile, "utf8")), liveRef: "main" }));
-  writeFileSync(join(project, ".atlas", "states", "order.json"), JSON.stringify({ id: "order", name: "Order", route: "/order", widths: [400] }));
+  writeFileSync(join(project, ".flowmap", "states", "order.json"), JSON.stringify({ id: "order", name: "Order", route: "/order", widths: [400] }));
 });
 afterEach(() => rmSync(project, { recursive: true, force: true }));
 
@@ -95,17 +95,17 @@ describe("compare", () => {
   });
 });
 
-describe("atlas_compare", () => {
+describe("flowmap_compare", () => {
   it("tells the agent how to capture live, then returns the changes and a picture of each area at live and on the branch", async () => {
     const client = new Client({ name: "test", version: "1.0.0" });
     await client.connect(new StdioClientTransport({ command: "node", args: [CLI, "mcp", "--root", project] }));
     try {
       await capture(project, { state: "order", baseUrl: branchUrl });
-      const before = await client.callTool({ name: "atlas_compare", arguments: { state: "order" } });
+      const before = await client.callTool({ name: "flowmap_compare", arguments: { state: "order" } });
       const [first] = before.content as { type: string; text: string }[];
       expect(first?.text).toContain("Nothing is captured at live");
       await capture(project, { state: "order", baseUrl: liveUrl, live: true });
-      const after = await client.callTool({ name: "atlas_compare", arguments: { state: "order" } });
+      const after = await client.callTool({ name: "flowmap_compare", arguments: { state: "order" } });
       const content = after.content as { type: string; text?: string; mimeType?: string }[];
       expect(content[0]?.text).toContain('"status": "changed"');
       expect(content.filter((c) => c.type === "image" && c.mimeType === "image/png")).toHaveLength(2);

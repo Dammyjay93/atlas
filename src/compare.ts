@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { diffArrays } from "diff";
 import pixelmatch from "pixelmatch";
 import { PNG } from "pngjs";
-import { AtlasError, readConfig, resolveRef } from "./project.js";
+import { FlowmapError, readConfig, resolveRef } from "./project.js";
 import { readStates } from "./states.js";
 import { readManifest, type Entry } from "./store.js";
 import type { LayoutItem } from "./text-map.js";
@@ -333,7 +333,7 @@ function changesIn(live: Picture, branch: Picture, g: Group, band: { x0: number;
 
 function work(root: string, cssWidth: number, liveEntry: Entry, branchEntry: Entry): Comparison {
   const live = readPicture(root, liveEntry, cssWidth), branch = readPicture(root, branchEntry, cssWidth);
-  if (live.width !== branch.width) throw new AtlasError(`The live and branch pictures have different widths (${live.width} and ${branch.width} pixels). Capture both again.`);
+  if (live.width !== branch.width) throw new FlowmapError(`The live and branch pictures have different widths (${live.width} and ${branch.width} pixels). Capture both again.`);
   const k = branch.k;
   const band = changedColumns(live, branch);
   if (!band) return { status: "same", moved: false, areas: [] };
@@ -392,11 +392,11 @@ export interface StateComparison {
 export function compareState(root: string, id: string, branchCommit?: string): StateComparison {
   const config = readConfig(root);
   const state = readStates(root).states.find((s) => s.id === id);
-  if (!state) throw new AtlasError(`No valid recipe with id "${id}". Call atlas_states to see the recipes.`);
+  if (!state) throw new FlowmapError(`No valid recipe with id "${id}". Call flowmap_states to see the recipes.`);
   const liveCommit = resolveRef(root, config.liveRef);
-  if (!liveCommit) throw new AtlasError(`Live's ref "${config.liveRef}" does not resolve to a commit. Fetch it, or set "liveRef" in .atlas/config.json.`);
+  if (!liveCommit) throw new FlowmapError(`Live's ref "${config.liveRef}" does not resolve to a commit. Fetch it, or set "liveRef" in .flowmap/config.json.`);
   const commit = branchCommit ?? resolveRef(root, "HEAD");
-  if (!commit) throw new AtlasError("The project has no commit yet. Commit once, then capture.");
+  if (!commit) throw new FlowmapError("The project has no commit yet. Commit once, then capture.");
   const liveManifest = readManifest(root, liveCommit), branchManifest = readManifest(root, commit);
   const widths = state.widths ?? config.widths;
   return {

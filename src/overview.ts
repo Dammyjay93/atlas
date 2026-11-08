@@ -8,7 +8,7 @@ export interface Overview extends StateList {
   branch: { name: string | null; commit: string | null };
 }
 
-/** What `atlas states` and the `atlas_states` tool report. */
+/** What `flowmap states` and the `flowmap_states` tool report. */
 export function overview(root: string): Overview {
   const config = readConfig(root);
   return {

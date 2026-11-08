@@ -4,7 +4,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { baseOf, hasUncommitted, launch, shoot, type CookieInput } from "./capture.js";
 import { compareEntries, type Area } from "./compare.js";
-import { AtlasError, readConfig, resolveRef } from "./project.js";
+import { FlowmapError, readConfig, resolveRef } from "./project.js";
 import { readStates } from "./states.js";
 import { readManifest, type Entry, type Manifest } from "./store.js";
 
@@ -36,7 +36,7 @@ export interface CheckResult {
 }
 
 /** Where a check keeps its own captures, so they never replace a commit's captures. */
-const checkDir = (root: string) => join(root, ".atlas", "store", "check");
+const checkDir = (root: string) => join(root, ".flowmap", "store", "check");
 
 function clean(manifest: Manifest | null): boolean {
   return !!manifest && Object.values(manifest.states).every((byWidth) => Object.values(byWidth).every((e) => !e.uncommitted));
@@ -46,9 +46,9 @@ function clean(manifest: Manifest | null): boolean {
 function baseline(root: string, head: string, uncommitted: boolean, wanted?: string): Manifest | null {
   if (wanted) {
     const commit = resolveRef(root, wanted);
-    if (!commit) throw new AtlasError(`"${wanted}" does not resolve to a commit.`);
+    if (!commit) throw new FlowmapError(`"${wanted}" does not resolve to a commit.`);
     const m = readManifest(root, commit);
-    if (!m) throw new AtlasError(`Nothing is captured at ${commit}. Capture the states there first, or leave out base.`);
+    if (!m) throw new FlowmapError(`Nothing is captured at ${commit}. Capture the states there first, or leave out base.`);
     return m;
   }
   const own = readManifest(root, head);
@@ -75,9 +75,9 @@ function baseline(root: string, head: string, uncommitted: boolean, wanted?: str
 export async function check(root: string, input: CheckInput): Promise<CheckResult> {
   const config = readConfig(root);
   const { states } = readStates(root);
-  if (!states.length) throw new AtlasError("There are no state recipes to check. Write recipes first.");
+  if (!states.length) throw new FlowmapError("There are no state recipes to check. Write recipes first.");
   const head = resolveRef(root, "HEAD");
-  if (!head) throw new AtlasError("The project has no commit yet. Commit once, then check.");
+  if (!head) throw new FlowmapError("The project has no commit yet. Commit once, then check.");
   const base = baseOf(input.baseUrl);
   const uncommitted = hasUncommitted(root);
   const before = baseline(root, head, uncommitted, input.base);
@@ -95,7 +95,7 @@ export async function check(root: string, input: CheckInput): Promise<CheckResul
         continue;
       }
       for (const s of shots) {
-        const dir = join(".atlas", "store", "check", state.id);
+        const dir = join(".flowmap", "store", "check", state.id);
         mkdirSync(join(root, dir), { recursive: true });
         const layout = join(dir, `${s.width}.layout.json`);
         const now: Entry = {

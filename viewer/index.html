@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Atlas</title>
+<title>Flowmap</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400..600&display=swap">
@@ -113,7 +113,7 @@ svg.links circle.on { stroke: var(--sel); }
 /* One outer margin, 8 px, for every bar and the panel. */
 .top-left { top: calc(8px + env(safe-area-inset-top, 0px)); left: max(8px, env(safe-area-inset-left, 0px)); max-width: calc(100% - 260px); }
 /* The screens panel's header, built like every bar: 4 px padding and controls 32 px tall with an 8 px radius (the bar's 12 less
-   its padding), so every corner nests. Closed, it is one row: the panel button, the breadcrumb Atlas / project, then the branch.
+   its padding), so every corner nests. Closed, it is one row: the panel button, the breadcrumb Flowmap / project, then the branch.
    Open, the breadcrumb and the button make the first row, and the branch a full-width second row, like a branch picker. */
 .shead { display: flex; align-items: center; gap: 4px; min-width: 0; height: 32px; }
 .crumb { display: flex; align-items: baseline; gap: 6px; min-width: 0; padding: 0 6px 0 4px; }
@@ -133,7 +133,7 @@ svg.links circle.on { stroke: var(--sel); }
 /* Text in the open header starts 12 px from the panel's edge: 4 px of padding and 8 px inside each control. */
 .side.open .crumb { flex: 1; padding-left: 8px; }
 .side.open .stoggle { order: 2; }
-/* The branch field is inset 12 px, the same as the text above it: its left edge lines up with "Atlas". */
+/* The branch field is inset 12 px, the same as the text above it: its left edge lines up with "Flowmap". */
 .side.open .meta { order: 3; flex-basis: 100%; flex-wrap: wrap; margin: 0 8px 4px; }
 /* The field keeps its whole row; a freshness warning or the agent's activity wraps underneath it. */
 .side.open .ver { flex: 1 0 100%; padding: 0 10px; }
@@ -294,7 +294,7 @@ button.crop { display: block; width: 100%; padding: 0; border: 0; cursor: zoom-i
 <aside class="float top-left side" id="side" aria-labelledby="brand">
   <div class="shead">
     <button class="zbtn stoggle" id="sideBtn" type="button" aria-expanded="false" aria-controls="slist" aria-label="Show the screens list"></button>
-    <span class="crumb"><span class="word">Atlas</span><span class="slash" aria-hidden="true">/</span><h1 class="brand" id="brand">Atlas</h1></span>
+    <span class="crumb"><span class="word">Flowmap</span><span class="slash" aria-hidden="true">/</span><h1 class="brand" id="brand">Flowmap</h1></span>
     <span class="meta"><span class="ver" id="ver"></span><span class="warn" id="fresh" hidden></span><span class="act" id="act" role="status" hidden></span></span>
   </div>
   <nav class="slist" id="slist" aria-label="Screens" hidden></nav>
@@ -636,8 +636,8 @@ function render(keepView) {
   if (nothing) {
     $("emptyTitle").textContent = "No screens yet";
     $("emptyText").textContent = data.invalid.length
-      ? `${data.invalid.length} ${data.invalid.length === 1 ? "recipe needs" : "recipes need"} repair. Ask your coding agent to fix them; it can see the problems with atlas_states.`
-      : "Ask your coding agent to set up Atlas for this app. It writes a recipe for each screen and captures it here.";
+      ? `${data.invalid.length} ${data.invalid.length === 1 ? "recipe needs" : "recipes need"} repair. Ask your coding agent to fix them; it can see the problems with flowmap_states.`
+      : "Ask your coding agent to set up Flowmap for this app. It writes a recipe for each screen and captures it here.";
   }
   if (keepView) apply(); else fitFirst();
   const wasComparing = comparing; comparing = null;
@@ -918,8 +918,8 @@ function setSide(open, remember = true) {
   $("sideBtn").setAttribute("aria-expanded", String(open));
   $("sideBtn").setAttribute("aria-label", open ? "Hide the screens list" : "Show the screens list");
   if (!remember) return;
-  try { localStorage.setItem("atlas.side", open ? "open" : "closed"); }
-  catch (error) { console.warn("Atlas could not remember whether the screens list is open, for example in a private window.", error); }
+  try { localStorage.setItem("flowmap.side", open ? "open" : "closed"); }
+  catch (error) { console.warn("Flowmap could not remember whether the screens list is open, for example in a private window.", error); }
 }
 $("sideBtn").addEventListener("click", () => { setSide(!sideOpen); if (data) apply(); });
 function fillSide() {
@@ -971,7 +971,7 @@ $("slist").addEventListener("click", (e) => {
 /* The top bar: which commit the screens show, and how far the code has moved since. */
 function fillFreshness() {
   $("brand").textContent = data.project.name;
-  document.title = `${data.project.name} · Atlas`;
+  document.title = `${data.project.name} · Flowmap`;
   const shown = data.shown, branch = data.branch.name ?? "detached";
   $("ver").innerHTML = `${icon("git-branch-linear")}<span class="b">${esc(branch)}</span><code>${esc(shown ? shown.commit : data.branch.commit ?? "no commit")}</code>`;
   const anyUncommitted = Object.values(data.shots).some((byWidth) => Object.values(byWidth).some((e) => e.uncommitted));
@@ -989,15 +989,15 @@ function showActivity(a) {
   const name = byId().get(a.state)?.name ?? a.state ?? "a screen";
   const el = $("act");
   clearTimeout(actTimer);
-  el.innerHTML = a.tool === "atlas_check"
+  el.innerHTML = a.tool === "flowmap_check"
     ? (a.phase === "start" ? "<i></i>Checking every screen" : a.phase === "done" ? "Checked every screen" : "The check failed")
-    : a.tool === "atlas_version_start"
+    : a.tool === "flowmap_version_start"
     ? `<i></i>Building a version of ${esc(name)}`
-    : a.tool === "atlas_task_update"
+    : a.tool === "flowmap_task_update"
     ? (a.phase === "start" ? "<i></i>Updating a task" : a.phase === "done" ? "Updated a task" : "A task update failed")
     : a.phase === "start" ? `<i></i>Capturing ${esc(name)}` : a.phase === "done" ? `Captured ${esc(name)}` : `Capture of ${esc(name)} failed`;
   el.hidden = false;
-  if (a.phase !== "start" && a.tool !== "atlas_version_start") actTimer = setTimeout(() => { el.hidden = true; }, 4000);
+  if (a.phase !== "start" && a.tool !== "flowmap_version_start") actTimer = setTimeout(() => { el.hidden = true; }, 4000);
 }
 
 /* Comment mode: with Comment on, the element under the pointer is outlined. Click it to mark that element, or drag to mark a box,
@@ -1145,7 +1145,7 @@ $("expandClose").addEventListener("click", () => $("expand").close());
 $("expand").addEventListener("click", (e) => { if (e.target === $("expand")) $("expand").close(); });
 const promptOf = (t) => {
   const name = byId().get(t.state)?.name ?? t.state;
-  return `Atlas task ${t.id}, on "${name}" at ${t.width} px: ${t.words}${t.element ? `\nThe marked element is the ${t.element.tag} "${t.element.text}".` : ""}\nCall atlas_tasks to see the picture with the marked box. Change the code, capture ${t.state} with atlas_capture, then set the task to ready-for-review with atlas_task_update.`;
+  return `Flowmap task ${t.id}, on "${name}" at ${t.width} px: ${t.words}${t.element ? `\nThe marked element is the ${t.element.tag} "${t.element.text}".` : ""}\nCall flowmap_tasks to see the picture with the marked box. Change the code, capture ${t.state} with flowmap_capture, then set the task to ready-for-review with flowmap_task_update.`;
 };
 function openThread(t, refresh) {
   if (!t) return;
@@ -1176,7 +1176,7 @@ function openThread(t, refresh) {
 async function postTask(path, body) {
   const res = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const out = await res.json();
-  if (!res.ok) throw new Error(out.error ?? `Atlas answered ${res.status}`);
+  if (!res.ok) throw new Error(out.error ?? `Flowmap answered ${res.status}`);
   return out;
 }
 const showErr = (text) => { const err = $("terr"); err.textContent = text; err.hidden = false; placePop(); };
@@ -1220,8 +1220,8 @@ document.addEventListener("pointerdown", (e) => {
   closePop();
 });
 
-/* Connect: one row for each coding agent, with the action that adds Atlas to it, or its status once it has connected. */
-const ASK = "Set up Atlas for this app.";
+/* Connect: one row for each coding agent, with the action that adds Flowmap to it, or its status once it has connected. */
+const ASK = "Set up Flowmap for this app.";
 /** The client an MCP client name belongs to, such as "claude-code" to "claude". */
 const clientOf = (name) => (/claude/i.test(name) ? "claude" : /codex|openai/i.test(name) ? "codex" : /cursor/i.test(name) ? "cursor" : "other");
 function ago(iso) {
@@ -1283,9 +1283,9 @@ window.addEventListener("resize", () => apply());
 
 /* ---------- Data ---------- */
 async function load(keepView) {
-  const res = await fetch("/api/atlas");
+  const res = await fetch("/api/flowmap");
   const next = await res.json();
-  if (!res.ok) throw new Error(next.error ?? `Atlas answered ${res.status}`);
+  if (!res.ok) throw new Error(next.error ?? `Flowmap answered ${res.status}`);
   const first = !data;
   data = next;
   if (first && !flows().length) setMode("pages");
@@ -1298,7 +1298,7 @@ async function start() {
   $("commentBtn").innerHTML = `${icon("chat-round-line-linear")}Comment`;
   $("sideBtn").innerHTML = icon("panel-left-linear");
   let saved = null;
-  try { saved = localStorage.getItem("atlas.side"); } catch { saved = null; }
+  try { saved = localStorage.getItem("flowmap.side"); } catch { saved = null; }
   setSide(saved ? saved === "open" : innerWidth >= 1024, false);
   await load(false);
   const events = new EventSource("/api/events");
@@ -1307,8 +1307,8 @@ async function start() {
 }
 function showError(error) {
   $("empty").hidden = false;
-  $("emptyTitle").textContent = "Atlas could not load";
-  $("emptyText").textContent = `${error.message}. Check that "atlas serve" is still running.`;
+  $("emptyTitle").textContent = "Flowmap could not load";
+  $("emptyText").textContent = `${error.message}. Check that "flowmap serve" is still running.`;
   $("emptyConnect").hidden = true;
 }
 start().catch(showError);

@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse, stringify } from "yaml";
 import { z } from "zod";
-import { AtlasError, resolveRef } from "./project.js";
+import { FlowmapError, resolveRef } from "./project.js";
 import { readStates } from "./states.js";
 import { readManifest, type Entry } from "./store.js";
 import type { LayoutItem } from "./text-map.js";
@@ -40,7 +40,7 @@ const FrontSchema = z.strictObject({
 });
 export type Task = z.infer<typeof FrontSchema> & { words: string };
 
-const dir = (root: string) => join(root, ".atlas", "tasks");
+const dir = (root: string) => join(root, ".flowmap", "tasks");
 const fileOf = (root: string, id: string) => join(dir(root), `${id}.md`);
 
 function write(root: string, task: Task): void {
@@ -56,7 +56,7 @@ function parseTask(text: string): Task {
   return { ...front.data, words: (match[2] ?? "").trim() };
 }
 
-/** Every task in .atlas/tasks, newest first, and the files that could not be read. */
+/** Every task in .flowmap/tasks, newest first, and the files that could not be read. */
 export function readTasks(root: string): { tasks: Task[]; invalid: { file: string; problem: string }[] } {
   const tasks: Task[] = [];
   const invalid: { file: string; problem: string }[] = [];
@@ -65,18 +65,18 @@ export function readTasks(root: string): { tasks: Task[]; invalid: { file: strin
     try {
       tasks.push(parseTask(readFileSync(join(dir(root), file), "utf8")));
     } catch (error) {
-      invalid.push({ file: `.atlas/tasks/${file}`, problem: error instanceof Error ? error.message : String(error) });
+      invalid.push({ file: `.flowmap/tasks/${file}`, problem: error instanceof Error ? error.message : String(error) });
     }
   }
   return { tasks: tasks.sort((a, b) => b.created.localeCompare(a.created)), invalid };
 }
 
 export function readTask(root: string, id: string): Task {
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(id) || !existsSync(fileOf(root, id))) throw new AtlasError(`No task with id "${id}". Call atlas_tasks to see the tasks.`);
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(id) || !existsSync(fileOf(root, id))) throw new FlowmapError(`No task with id "${id}". Call flowmap_tasks to see the tasks.`);
   try {
     return parseTask(readFileSync(fileOf(root, id), "utf8"));
   } catch (error) {
-    throw new AtlasError(`.atlas/tasks/${id}.md cannot be read: ${error instanceof Error ? error.message : String(error)}`);
+    throw new FlowmapError(`.flowmap/tasks/${id}.md cannot be read: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -117,11 +117,11 @@ export const CreateSchema = z.strictObject({
 
 /** Makes a task from the person's mark on a capture. */
 export function createTask(root: string, input: z.infer<typeof CreateSchema>): Task {
-  if (!readStates(root).states.some((s) => s.id === input.state)) throw new AtlasError(`No valid recipe with id "${input.state}".`);
+  if (!readStates(root).states.some((s) => s.id === input.state)) throw new FlowmapError(`No valid recipe with id "${input.state}".`);
   const entry = input.variant
     ? versionEntry(root, input.variant.set, input.variant.name, input.state, input.width)
     : readManifest(root, input.commit)?.states[input.state]?.[String(input.width)];
-  if (!entry) throw new AtlasError(input.variant ? `Version "${input.variant.name}" of "${input.variant.set}" has no capture of ${input.state} at ${input.width} pixels.` : `${input.state} has no capture at ${input.width} pixels at ${input.commit}.`);
+  if (!entry) throw new FlowmapError(input.variant ? `Version "${input.variant.name}" of "${input.variant.set}" has no capture of ${input.state} at ${input.width} pixels.` : `${input.state} has no capture at ${input.width} pixels at ${input.commit}.`);
   const now = new Date();
   const id = `${input.state}-${now.getTime().toString(36)}`;
   const element = input.area ? elementUnder(root, entry, input.area) : undefined;
@@ -146,13 +146,13 @@ export function createTask(root: string, input: z.infer<typeof CreateSchema>): T
 export function chooseVariant(root: string, set: string, name: string, shown?: number): Task {
   const found = readVariantSets(root).find((v) => v.set === set);
   const option = found?.options.find((o) => o.name === name);
-  if (!found || !option) throw new AtlasError(`No version "${name}" in the set "${set}".`);
-  if (readTasks(root).tasks.some((t) => t.choice?.set === set && t.status !== "sent-back")) throw new AtlasError(`A version of "${set}" is already chosen.`);
+  if (!found || !option) throw new FlowmapError(`No version "${name}" in the set "${set}".`);
+  if (readTasks(root).tasks.some((t) => t.choice?.set === set && t.status !== "sent-back")) throw new FlowmapError(`A version of "${set}" is already chosen.`);
   const [state, byWidth] = Object.entries(option.shots)[0] ?? [];
   // The width the person chose at, when the version has it; else its widest capture.
   const widths = Object.keys(byWidth ?? {}).map(Number);
   const width = shown && widths.includes(shown) ? shown : Math.max(0, ...widths);
-  if (!state || !width) throw new AtlasError(`Version "${name}" of "${set}" has no capture.`);
+  if (!state || !width) throw new FlowmapError(`Version "${name}" of "${set}" has no capture.`);
   const others = found.options.filter((o) => o.name !== name).map((o) => o.name);
   const now = new Date();
   const task: Task = {
@@ -164,7 +164,7 @@ export function chooseVariant(root: string, set: string, name: string, shown?: n
     choice: { set, name, others },
     created: now.toISOString(),
     log: [{ at: now.toISOString(), by: "person", status: "open" }],
-    words: `Keep version ${name} of "${set}" (${option.note}). Make it the screen's only version: remove ${others.length ? `version${others.length === 1 ? "" : "s"} ${others.join(", ")} and ` : ""}the switch between the versions from the code, and apply any open comments on version ${name}. Capture the screens again, call atlas_check, then mark this task ready for review.`
+    words: `Keep version ${name} of "${set}" (${option.note}). Make it the screen's only version: remove ${others.length ? `version${others.length === 1 ? "" : "s"} ${others.join(", ")} and ` : ""}the switch between the versions from the code, and apply any open comments on version ${name}. Capture the screens again, call flowmap_check, then mark this task ready for review.`
   };
   write(root, task);
   return task;
@@ -177,22 +177,22 @@ const MOVES: Record<"person" | "agent", Partial<Record<Status, Status[]>>> = {
 };
 
 /**
- * Moves a task to a new status and logs who did it. When the agent marks it ready for review, Atlas attaches the state's capture
+ * Moves a task to a new status and logs who did it. When the agent marks it ready for review, Flowmap attaches the state's capture
  * at the current commit as the after picture, so the agent must capture first.
  */
 export function updateTask(root: string, id: string, by: "person" | "agent", status: Status, note?: string): Task {
   const task = readTask(root, id);
   const from = MOVES[by][status];
-  if (!from) throw new AtlasError(by === "agent" ? `An agent sets a task to in-progress or ready-for-review. The person approves it or sends it back.` : `The person approves a task or sends it back.`);
-  if (!from.includes(task.status)) throw new AtlasError(`Task ${id} is ${task.status}, so it cannot become ${status}.`);
-  if (by === "person" && status === "sent-back" && !note?.trim()) throw new AtlasError("Say what is still wrong, so the agent can fix it.");
+  if (!from) throw new FlowmapError(by === "agent" ? `An agent sets a task to in-progress or ready-for-review. The person approves it or sends it back.` : `The person approves a task or sends it back.`);
+  if (!from.includes(task.status)) throw new FlowmapError(`Task ${id} is ${task.status}, so it cannot become ${status}.`);
+  if (by === "person" && status === "sent-back" && !note?.trim()) throw new FlowmapError("Say what is still wrong, so the agent can fix it.");
   const now = new Date().toISOString();
   let after = task.after;
   if (status === "ready-for-review") {
     const head = resolveRef(root, "HEAD");
     const entry = head ? readManifest(root, head)?.states[task.state]?.[String(task.width)] : undefined;
     if (!head || !entry || entry.capturedAt < (task.log.at(-1)?.at ?? task.created)) {
-      throw new AtlasError(`Capture ${task.state} with atlas_capture after your change, then mark the task ready for review. Atlas attaches that capture for the person to check.`);
+      throw new FlowmapError(`Capture ${task.state} with flowmap_capture after your change, then mark the task ready for review. Flowmap attaches that capture for the person to check.`);
     }
     after = { commit: head, png: entry.png, capturedAt: entry.capturedAt };
   }

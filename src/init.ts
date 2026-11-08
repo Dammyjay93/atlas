@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { AtlasError, type ConfigFile } from "./project.js";
+import { FlowmapError, type ConfigFile } from "./project.js";
 
 /** The ref the project's remote names as its default branch, such as `origin/main`. */
 function defaultLiveRef(root: string): string {
@@ -28,23 +28,23 @@ export interface InitResult {
   created: string[];
 }
 
-/** Sets up `.atlas/` in a project: settings, a folder for state recipes, a folder for tasks, and a git-ignored capture store. */
+/** Sets up `.flowmap/` in a project: settings, a folder for state recipes, a folder for tasks, and a git-ignored capture store. */
 export function init(at: string): InitResult {
   const root = resolve(at);
-  const atlas = join(root, ".atlas");
-  const configFile = join(atlas, "config.json");
-  if (existsSync(configFile)) throw new AtlasError(`${configFile} already exists.`);
+  const flowmap = join(root, ".flowmap");
+  const configFile = join(flowmap, "config.json");
+  if (existsSync(configFile)) throw new FlowmapError(`${configFile} already exists.`);
   const created: string[] = [];
   const config: ConfigFile = { name: projectName(root), liveRef: defaultLiveRef(root), widths: [1440, 390] };
   for (const dir of ["states", "tasks"]) {
-    mkdirSync(join(atlas, dir), { recursive: true });
-    writeFileSync(join(atlas, dir, ".gitkeep"), "");
-    created.push(join(".atlas", dir) + "/");
+    mkdirSync(join(flowmap, dir), { recursive: true });
+    writeFileSync(join(flowmap, dir, ".gitkeep"), "");
+    created.push(join(".flowmap", dir) + "/");
   }
   writeFileSync(configFile, JSON.stringify(config, null, 2) + "\n");
-  created.unshift(join(".atlas", "config.json"));
+  created.unshift(join(".flowmap", "config.json"));
   const ignore = join(root, ".gitignore");
-  const line = ".atlas/store/";
+  const line = ".flowmap/store/";
   const current = existsSync(ignore) ? readFileSync(ignore, "utf8") : "";
   if (!current.split("\n").includes(line)) {
     appendFileSync(ignore, (current && !current.endsWith("\n") ? "\n" : "") + line + "\n");

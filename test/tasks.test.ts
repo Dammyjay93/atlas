@@ -27,13 +27,13 @@ afterAll(() => new Promise<void>((done) => app.close(() => done())));
 let project: string;
 let running: Running;
 beforeEach(async () => {
-  project = mkdtempSync(join(tmpdir(), "atlas-tasks-"));
+  project = mkdtempSync(join(tmpdir(), "flowmap-tasks-"));
   git(project, "init", "-q", "-b", "main");
   git(project, "config", "user.email", "test@example.com");
   git(project, "config", "user.name", "Test");
   git(project, "commit", "-q", "--allow-empty", "-m", "First");
   execFileSync("node", [CLI, "init"], { cwd: project });
-  writeFileSync(join(project, ".atlas", "states", "order.json"), JSON.stringify({ id: "order", name: "Order", route: "/order", widths: [400] }));
+  writeFileSync(join(project, ".flowmap", "states", "order.json"), JSON.stringify({ id: "order", name: "Order", route: "/order", widths: [400] }));
   await capture(project, { state: "order", baseUrl: appUrl });
   running = await serve(project, 0);
 });
@@ -69,7 +69,7 @@ describe("tasks from the viewer", () => {
     const made = await post("/api/tasks", { ...mark, commit: commit() });
     expect(made.status).toBe(200);
     expect(made.body).toMatchObject({ state: "order", status: "open", words: "Make Pay now the main button.", element: { tag: "button", text: "Pay now" } });
-    const file = join(project, ".atlas", "tasks", `${String(made.body.id)}.md`);
+    const file = join(project, ".flowmap", "tasks", `${String(made.body.id)}.md`);
     expect(existsSync(file)).toBe(true);
     expect(readFileSync(file, "utf8")).toMatch(/^---\nid: order-[0-9a-z]+\n[\s\S]*---\n\nMake Pay now the main button\.\n$/);
   });
@@ -85,23 +85,23 @@ describe("an agent works through a task", () => {
         const r = await client.callTool({ name, arguments: args });
         return { error: r.isError === true, content: r.content as { type: string; text?: string; mimeType?: string }[] };
       };
-      const listed = await call("atlas_tasks", {});
+      const listed = await call("flowmap_tasks", {});
       expect(listed.content[0]?.text).toContain(id);
       expect(listed.content.filter((c) => c.type === "image")).toHaveLength(1);
-      expect((await call("atlas_task_update", { id, status: "ready-for-review" })).content[0]?.text).toContain("Capture order");
-      expect((await call("atlas_task_update", { id, status: "approved" })).error).toBe(true);
-      expect((await call("atlas_task_update", { id, status: "in-progress" })).error).toBe(false);
+      expect((await call("flowmap_task_update", { id, status: "ready-for-review" })).content[0]?.text).toContain("Capture order");
+      expect((await call("flowmap_task_update", { id, status: "approved" })).error).toBe(true);
+      expect((await call("flowmap_task_update", { id, status: "in-progress" })).error).toBe(false);
       await capture(project, { state: "order", baseUrl: appUrl });
-      const ready = await call("atlas_task_update", { id, status: "ready-for-review", note: "Pay now is filled." });
+      const ready = await call("flowmap_task_update", { id, status: "ready-for-review", note: "Pay now is filled." });
       expect(ready.content[0]?.text).toContain('"after"');
       expect((await post(`/api/tasks/${id}`, { status: "sent-back" })).status).toBe(400);
       expect((await post(`/api/tasks/${id}`, { status: "sent-back", note: "Make it full width." })).body).toMatchObject({ status: "sent-back" });
-      expect((await call("atlas_tasks", {})).content[0]?.text).toContain("Make it full width.");
+      expect((await call("flowmap_tasks", {})).content[0]?.text).toContain("Make it full width.");
       await capture(project, { state: "order", baseUrl: appUrl });
-      await call("atlas_task_update", { id, status: "ready-for-review", note: "Full width now." });
+      await call("flowmap_task_update", { id, status: "ready-for-review", note: "Full width now." });
       expect((await post(`/api/tasks/${id}`, { status: "approved" })).body).toMatchObject({ status: "approved" });
-      expect((await call("atlas_tasks", {})).content[0]?.text).not.toContain(id);
-      expect((await call("atlas_tasks", { status: "approved" })).content[0]?.text).toContain(id);
+      expect((await call("flowmap_tasks", {})).content[0]?.text).not.toContain(id);
+      expect((await call("flowmap_tasks", { status: "approved" })).content[0]?.text).toContain(id);
     } finally {
       await client.close();
     }

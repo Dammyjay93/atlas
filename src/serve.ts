@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createServer, type Activity } from "./mcp.js";
 import { z } from "zod";
-import { AtlasError } from "./project.js";
+import { FlowmapError } from "./project.js";
 import { chooseVariant, createTask, CreateSchema, updateTask } from "./tasks.js";
 import { viewerData } from "./viewer-data.js";
 
@@ -30,9 +30,9 @@ export interface Running {
 }
 
 /**
- * Serves Atlas on this computer only:
+ * Serves Flowmap on this computer only:
  * - `/`: the viewer;
- * - `/api/atlas`: what the viewer draws, read fresh on each request;
+ * - `/api/flowmap`: what the viewer draws, read fresh on each request;
  * - `/api/events`: a live stream that says when recipes or captures change, and what agents are doing;
  * - `/store/…`: the captured pictures and snapshots;
  * - `POST /api/tasks` and `POST /api/tasks/<id>`: the person makes a task, or approves it or sends it back, from the viewer;
@@ -43,21 +43,21 @@ export function serve(root: string, port: number = DEFAULT_PORT): Promise<Runnin
   const events = new EventEmitter();
   events.setMaxListeners(0);
   let pending: NodeJS.Timeout | undefined;
-  const atlasDir = join(root, ".atlas");
-  const watcher = existsSync(atlasDir)
-    ? watch(atlasDir, { recursive: true }, () => {
+  const flowmapDir = join(root, ".flowmap");
+  const watcher = existsSync(flowmapDir)
+    ? watch(flowmapDir, { recursive: true }, () => {
         clearTimeout(pending);
         pending = setTimeout(() => events.emit("update"), 250);
       })
     : null;
-  const storeDir = resolve(atlasDir, "store");
-  /** Agents that connected since Atlas started, from the name and version they send when they connect. */
+  const storeDir = resolve(flowmapDir, "store");
+  /** Agents that connected since Flowmap started, from the name and version they send when they connect. */
   const agents = new Map<string, Agent>();
 
   const server = createHttpServer(async (req, res) => {
     const actual = (server.address() as AddressInfo).port;
     const hosts = ["localhost", "127.0.0.1", "[::1]"].map((h) => `${h}:${actual}`);
-    if (!hosts.includes(req.headers.host ?? "")) return send(res, 403, "text/plain; charset=utf-8", "Atlas answers only on this computer.\n");
+    if (!hosts.includes(req.headers.host ?? "")) return send(res, 403, "text/plain; charset=utf-8", "Flowmap answers only on this computer.\n");
     const path = decodeURIComponent(new URL(req.url ?? "/", "http://localhost").pathname);
 
     if (path === "/mcp") {
@@ -83,7 +83,7 @@ export function serve(root: string, port: number = DEFAULT_PORT): Promise<Runnin
           events.emit("update");
         }
       } catch (error) {
-        process.stderr.write(`Atlas could not answer an MCP request: ${error instanceof Error ? error.message : String(error)}\n`);
+        process.stderr.write(`Flowmap could not answer an MCP request: ${error instanceof Error ? error.message : String(error)}\n`);
         if (!res.headersSent) send(res, 500, "application/json", JSON.stringify({ jsonrpc: "2.0", error: { code: -32603, message: "Internal error" }, id: null }));
       }
       return;
@@ -91,7 +91,7 @@ export function serve(root: string, port: number = DEFAULT_PORT): Promise<Runnin
     if (path === "/api/tasks" || path.startsWith("/api/tasks/")) {
       // Only the viewer's own page may write: browsers send Origin with every POST, and a page elsewhere cannot fake it.
       if (req.method !== "POST" || !hosts.map((h) => `http://${h}`).includes(req.headers.origin ?? "") || !(req.headers["content-type"] ?? "").startsWith("application/json")) {
-        return send(res, 403, "application/json", JSON.stringify({ error: "Tasks change only from the Atlas viewer." }));
+        return send(res, 403, "application/json", JSON.stringify({ error: "Tasks change only from the Flowmap viewer." }));
       }
       try {
         const body = JSON.parse(await readBody(req)) as unknown;
@@ -105,7 +105,7 @@ export function serve(root: string, port: number = DEFAULT_PORT): Promise<Runnin
             })();
         return send(res, 200, "application/json", JSON.stringify(task));
       } catch (error) {
-        const message = error instanceof z.ZodError ? (error.issues[0]?.message ?? "The request is not valid.") : error instanceof AtlasError || error instanceof SyntaxError ? error.message : null;
+        const message = error instanceof z.ZodError ? (error.issues[0]?.message ?? "The request is not valid.") : error instanceof FlowmapError || error instanceof SyntaxError ? error.message : null;
         if (message === null) throw error;
         return send(res, 400, "application/json", JSON.stringify({ error: message }));
       }
@@ -113,7 +113,7 @@ export function serve(root: string, port: number = DEFAULT_PORT): Promise<Runnin
     if (req.method !== "GET") return send(res, 405, "text/plain; charset=utf-8", "Use GET.\n");
     if (path === "/") return send(res, 200, "text/html; charset=utf-8", readFileSync(VIEWER, "utf8"));
     if (path === "/icons.json") return send(res, 200, "application/json", readFileSync(ICONS, "utf8"));
-    if (path === "/api/atlas") {
+    if (path === "/api/flowmap") {
       try {
         return send(res, 200, "application/json", JSON.stringify(viewerData(root, actual, [...agents.values()])));
       } catch (error) {
@@ -148,7 +148,7 @@ export function serve(root: string, port: number = DEFAULT_PORT): Promise<Runnin
 
   return new Promise((done, fail) => {
     server.once("error", (error: NodeJS.ErrnoException) =>
-      fail(error.code === "EADDRINUSE" ? new AtlasError(`Port ${port} is in use. Stop the other program, or start Atlas with --port and another number.`) : error)
+      fail(error.code === "EADDRINUSE" ? new FlowmapError(`Port ${port} is in use. Stop the other program, or start Flowmap with --port and another number.`) : error)
     );
     server.listen(port, "127.0.0.1", () => {
       const actual = (server.address() as AddressInfo).port;
@@ -167,7 +167,7 @@ function readBody(req: IncomingMessage): Promise<string> {
     req.on("data", (chunk: Buffer) => {
       body += chunk.toString();
       if (body.length > 65_536) {
-        fail(new AtlasError("The request is too large."));
+        fail(new FlowmapError("The request is too large."));
         req.destroy();
       }
     });

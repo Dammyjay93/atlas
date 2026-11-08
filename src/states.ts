@@ -12,7 +12,7 @@ const StepSchema = z.union([
 
 /**
  * How to reach one state of the product. Agents write a recipe when they build a screen and repair it when it stops working.
- * The agent runs `setup` and `session`; Atlas opens `route` and runs `steps`.
+ * The agent runs `setup` and `session`; Flowmap opens `route` and runs `steps`.
  */
 export const StateSchema = z.strictObject({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "use lowercase letters, digits and hyphens"),
@@ -37,7 +37,7 @@ export interface StateList {
 }
 
 export function readStates(root: string): StateList {
-  const dir = join(root, ".atlas", "states");
+  const dir = join(root, ".flowmap", "states");
   let files: string[];
   try {
     files = readdirSync(dir).filter((f) => f.endsWith(".json")).sort();
@@ -47,7 +47,7 @@ export function readStates(root: string): StateList {
   const list: StateList = { states: [], invalid: [] };
   const seen = new Map<string, string>();
   for (const file of files) {
-    const path = join(".atlas", "states", file);
+    const path = join(".flowmap", "states", file);
     let raw: unknown;
     try {
       raw = JSON.parse(readFileSync(join(dir, file), "utf8"));
@@ -72,7 +72,7 @@ export function readStates(root: string): StateList {
   const ids = new Set(list.states.map((s) => s.id));
   for (const state of list.states) {
     for (const edge of state.leadsTo ?? []) {
-      if (!ids.has(edge.state)) list.invalid.push({ file: join(".atlas", "states", `${state.id}.json`), problem: `leadsTo names "${edge.state}", which has no recipe` });
+      if (!ids.has(edge.state)) list.invalid.push({ file: join(".flowmap", "states", `${state.id}.json`), problem: `leadsTo names "${edge.state}", which has no recipe` });
     }
   }
   return list;

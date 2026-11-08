@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { FlowmapError, type ConfigFile } from "./project.js";
 
@@ -43,12 +43,9 @@ export function init(at: string): InitResult {
   }
   writeFileSync(configFile, JSON.stringify(config, null, 2) + "\n");
   created.unshift(join(".flowmap", "config.json"));
-  const ignore = join(root, ".gitignore");
-  const line = ".flowmap/store/";
-  const current = existsSync(ignore) ? readFileSync(ignore, "utf8") : "";
-  if (!current.split("\n").includes(line)) {
-    appendFileSync(ignore, (current && !current.endsWith("\n") ? "\n" : "") + line + "\n");
-    created.push(".gitignore: " + line);
-  }
+  // The ignore rule lives inside .flowmap/, so set-up leaves the project's own files untouched: a project with nothing to
+  // commit stays clean, and its first captures can be the baseline of the first check.
+  writeFileSync(join(flowmap, ".gitignore"), "store/\n");
+  created.push(join(".flowmap", ".gitignore") + ": store/");
   return { root, config, created };
 }

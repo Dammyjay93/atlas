@@ -29,7 +29,7 @@ Your part:
 3. Capture each of those states with flowmap_capture, and look at the pictures it returns.
 4. When a recipe stops working because the app changed, repair it in the same change.
 5. To show what differs from live, capture the same states at live and call flowmap_compare. See the compare topic.
-6. Before you say a change is done, call flowmap_check. It captures every state and shows every screen your change touched, including ones you did not mean to change.
+6. Before you say a change is done, call flowmap_check. It captures every state and shows every screen your change touched, including ones you did not mean to change. After you commit, call it again: on committed code it files every capture under the commit, so the person sees every screen at it.
 7. The person marks what should change on a screen. Each mark is a task: call flowmap_tasks and work through them. See the tasks topic.
 
 8. When the person asks for several versions of a screen, build them so they can choose in Flowmap. See the variations topic.

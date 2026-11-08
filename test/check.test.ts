@@ -7,7 +7,7 @@ import { join, resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { capture } from "../src/capture.js";
+import { capture, captureMany } from "../src/capture.js";
 import { check } from "../src/check.js";
 
 const CLI = resolve("dist/cli.js");
@@ -75,6 +75,32 @@ describe("check", () => {
     const result = await check(project, { baseUrl: afterUrl });
     expect(result.base?.commit).toBe(first);
     expect(result.widths.map((w) => `${w.state} ${w.status}`).sort()).toEqual(["help same", "order changed"]);
+  });
+
+  it("compares each screen with its newest earlier capture, when the commit before captured only some screens", async () => {
+    writeFileSync(join(project, "app.txt"), "two");
+    git(project, "commit", "-qam", "Second");
+    await capture(project, { state: "order", baseUrl: afterUrl });
+    writeFileSync(join(project, "app.txt"), "three");
+    git(project, "commit", "-qam", "Third");
+    const result = await check(project, { baseUrl: afterUrl });
+    expect(result.widths.map((w) => `${w.state} ${w.status}`).sort()).toEqual(["help same", "order same"]);
+  });
+
+  it("files a committed change's captures under its commit, so every screen shows at it", async () => {
+    writeFileSync(join(project, "app.txt"), "two");
+    git(project, "commit", "-qam", "Second");
+    await check(project, { baseUrl: afterUrl });
+    expect(Object.keys(JSON.parse(manifestText()).states).sort()).toEqual(["help", "order"]);
+  });
+});
+
+describe("capture every state", () => {
+  it("captures every recipe in one run and files each under the commit", async () => {
+    const results = await captureMany(project, { baseUrl: afterUrl });
+    expect(results.map((r) => r.state)).toEqual(["help", "order"]);
+    expect(Object.keys(JSON.parse(manifestText()).states).sort()).toEqual(["help", "order"]);
+    await expect(captureMany(project, { baseUrl: afterUrl, states: ["nope"] })).rejects.toThrow(/No valid recipe with id "nope"/);
   });
 });
 

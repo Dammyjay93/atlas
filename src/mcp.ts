@@ -213,7 +213,7 @@ export function createServer(root: string, onActivity: (activity: Activity) => v
     {
       title: "Check every screen",
       description:
-        "Before you say a change is done: captures every state at your current code and compares each with its capture before your change, so you see every screen your change touched, including screens you did not mean to change. Start the app with your change first, and run each recipe's setup. Returns each state's status (same, changed, new, failed), the elements that changed, and pictures of each changed area before and now. Fix any change you did not intend, or tell the person why it is expected. It replaces no captures.",
+        "Before you say a change is done: captures every state at your current code and compares each with its capture before your change, so you see every screen your change touched, including screens you did not mean to change. Start the app with your change first, and run each recipe's setup. Returns each state's status (same, changed, new, failed), the elements that changed, and pictures of each changed area before and now. Fix any change you did not intend, or tell the person why it is expected. Run it again after you commit: on committed code it files every capture under the commit, so the person sees every screen at it.",
       inputSchema: {
         baseUrl: z.string().describe("Where you started the app with your change, such as http://localhost:3000"),
         cookies: z

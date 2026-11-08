@@ -47,6 +47,10 @@ export interface CaptureResult {
   widths: WidthResult[];
 }
 
+/** A page counts as settled when two pictures this far apart match. Flowmap waits at most SETTLE_TRIES times the gap. */
+const SETTLE_GAP_MS = 150;
+const SETTLE_TRIES = 20;
+
 /** The window height for a width: a laptop screen for wide layouts, a phone screen for narrow ones. */
 const heightFor = (width: number) => (width >= 768 ? 900 : 844);
 
@@ -102,9 +106,8 @@ export function baseOf(baseUrl: string): URL {
  */
 export async function shoot(browser: Browser, root: string, state: State, base: URL, cookies: CookieInput[] | undefined, widths: number[]): Promise<Shot[]> {
   const config = readConfig(root);
-  const shots: Shot[] = [];
-  try {
-    for (const width of widths) {
+  // Each width has its own window, so the widths are captured at the same time.
+  const one = async (width: number): Promise<Shot> => {
       const context = await browser.newContext({ viewport: { width, height: heightFor(width) }, deviceScaleFactor: 2, reducedMotion: "reduce" });
       try {
         // Set by host and path, not by URL: Playwright marks a cookie set by URL as secure only on https, which rejects
@@ -126,35 +129,61 @@ export async function shoot(browser: Browser, root: string, state: State, base: 
         if (state.steps?.length) await page.waitForLoadState("networkidle");
         for (const selector of config.hide) await page.locator(selector).evaluateAll((els) => els.forEach((el) => el.remove()));
         const opts = { fullPage: state.fullPage ?? false, animations: "disabled" as const, caret: "hide" as const };
+        // Wait until the page stops changing: a loading bar or late content would otherwise show as a change that is not one.
+        let last = await page.screenshot({ ...opts, type: "png", scale: "css" });
+        for (let tries = 0; tries < SETTLE_TRIES; tries++) {
+          await page.waitForTimeout(SETTLE_GAP_MS);
+          const next = await page.screenshot({ ...opts, type: "png", scale: "css" });
+          if (next.equals(last)) break;
+          last = next;
+        }
         const png = await page.screenshot({ ...opts, type: "png" });
         const preview = await page.screenshot({ ...opts, type: "jpeg", quality: 70, scale: "css" });
         // Before the snapshot, which rewrites the page's styles and so its layout.
         const layout = await page.evaluate(layoutMap, opts.fullPage);
         const html = await page.evaluate(snapshotPage);
         const landed = new URL(page.url());
-        shots.push({
+        return {
           width, png, preview, html, layout,
           route: state.route,
           ...(landed.pathname + landed.search !== target.pathname + target.search ? { landedOn: landed.pathname + landed.search } : {}),
           status: response?.status() ?? 0,
           capturedAt: new Date().toISOString()
-        });
+        };
       } finally {
         await context.close();
       }
-    }
+  };
+  try {
+    return await Promise.all(widths.map(one));
   } catch (error) {
     if (error instanceof FlowmapError) throw error;
     throw new FlowmapError(`Capturing "${state.id}" failed: ${(error as Error).message.split("\n")[0]}`);
   }
-  return shots;
 }
+
+/** Runs `run` on each item, at most `limit` at a time, and returns the results in the items' order. */
+export async function inParallel<T, R>(items: T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const at = next++;
+      results[at] = await run(items[at] as T);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+/** How many states Flowmap captures at the same time, each with all its widths. */
+export const AT_ONCE = 4;
 
 /**
  * Captures one state at each width and files it in the store under the current commit, or live's commit with `live`.
  * The agent has already prepared the state (seeded data, started the app, made a test session).
  */
-export async function capture(root: string, input: CaptureInput): Promise<CaptureResult> {
+export async function capture(root: string, input: CaptureInput, shared?: Browser): Promise<CaptureResult> {
   const config = readConfig(root);
   const { states } = readStates(root);
   const state = states.find((s) => s.id === input.state);
@@ -167,14 +196,14 @@ export async function capture(root: string, input: CaptureInput): Promise<Captur
   const base = baseOf(input.baseUrl);
   const at = { commit, branch: input.live ? config.liveRef : currentBranch(root) };
   const uncommitted = input.live ? false : hasUncommitted(root);
-  const browser = await launch();
+  const browser = shared ?? (await launch());
   let shots: Shot[];
   try {
     // A version is captured from its own address; the rest of the recipe (steps, widths) applies as it is.
     const shown = input.variant?.route ? { ...state, route: input.variant.route } : state;
     shots = await shoot(browser, root, shown, base, input.cookies, input.widths ?? state.widths ?? config.widths);
   } finally {
-    await browser.close();
+    if (!shared) await browser.close();
   }
   const variant = input.variant;
   const results = shots.map((s): WidthResult => {
@@ -191,4 +220,19 @@ export async function capture(root: string, input: CaptureInput): Promise<Captur
   // Every width is filed, so the version is built: the viewer swaps its building frame for the pictures at once.
   if (variant) markBuilding(root, variant, commit, state.id, false);
   return { state: state.id, commit, branch: at.branch, uncommitted, widths: results };
+}
+
+/** Captures several states, or every state, in one browser, several at a time. */
+export async function captureMany(root: string, input: Omit<CaptureInput, "state" | "variant" | "live"> & { states?: string[] }): Promise<CaptureResult[]> {
+  const all = readStates(root).states.map((s) => s.id);
+  const ids = input.states?.length ? input.states : all;
+  const unknown = ids.filter((id) => !all.includes(id));
+  if (unknown.length) throw new FlowmapError(`No valid recipe with id ${unknown.map((u) => `"${u}"`).join(", ")}. Recipes: ${all.join(", ") || "none"}.`);
+  if (!ids.length) throw new FlowmapError("There are no state recipes to capture. Write recipes first.");
+  const browser = await launch();
+  try {
+    return await inParallel(ids, AT_ONCE, (state) => capture(root, { ...input, state }, browser));
+  } finally {
+    await browser.close();
+  }
 }

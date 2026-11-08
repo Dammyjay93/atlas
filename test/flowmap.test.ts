@@ -35,12 +35,30 @@ describe("flowmap init", () => {
     flowmap(project, "init");
     const config = JSON.parse(readFileSync(join(project, ".flowmap", "config.json"), "utf8"));
     expect(config).toEqual({ name: "shop", liveRef: "origin/main", widths: [1440, 390] });
-    expect(readFileSync(join(project, ".gitignore"), "utf8")).toContain(".flowmap/store/");
+    expect(readFileSync(join(project, ".flowmap", ".gitignore"), "utf8")).toBe("store/\n");
   });
 
   it("refuses to overwrite existing settings", () => {
     flowmap(project, "init");
     expect(() => flowmap(project, "init")).toThrow(/already exists/);
+  });
+});
+
+describe("flowmap setup", () => {
+  it("sets the project up, leaves its own files alone, starts Flowmap in the background and tells the agent what to do next", async () => {
+    const said = flowmap(project, "setup", "--no-open");
+    const port = Number(/localhost:(\d+)\//.exec(said)?.[1]);
+    try {
+      expect(said).toMatch(/Do the next steps now/);
+      expect(said).toMatch(/npx flowmap capture --base-url/);
+      expect(git(project, "status", "--porcelain")).toBe("?? .flowmap/");
+      const data = (await (await fetch(`http://localhost:${port}/api/flowmap`)).json()) as { project: { root: string } };
+      expect(data.project.root).toBe(execFileSync("realpath", [project], { encoding: "utf8" }).trim());
+      // A second setup finds the running Flowmap instead of starting another.
+      expect(flowmap(project, "setup", "--no-open")).toContain(`localhost:${port}/`);
+    } finally {
+      execFileSync("sh", ["-c", `lsof -ti tcp:${port} -sTCP:LISTEN | xargs kill`]);
+    }
   });
 });
 

@@ -19,10 +19,15 @@
   --sans: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
-@media (prefers-color-scheme: dark) { :root {
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --ground: #1c1c1e; --canvas: #121213; --ink: #f2f2f3; --ink-2: #b4b4bb; --ink-3: #939399;
   --line: #2c2c30; --hover: #28282b; --connector: #6b6b72; --edge: rgba(255, 255, 255, .1); --hairline: rgba(255, 255, 255, .14);
   --term: #0c0c0e; --term-ink: #f4f4f5; --fresh: #6fbf6f; --warn-bg: rgba(224, 160, 64, .14); --warn-ink: #f0b863; --absent: #4a4a4f; --focus: #a5b4fc; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --ground: #1c1c1e; --canvas: #121213; --ink: #f2f2f3; --ink-2: #b4b4bb; --ink-3: #939399;
+  --line: #2c2c30; --hover: #28282b; --connector: #6b6b72; --edge: rgba(255, 255, 255, .1); --hairline: rgba(255, 255, 255, .14);
+  --term: #0c0c0e; --term-ink: #f4f4f5; --fresh: #6fbf6f; --warn-bg: rgba(224, 160, 64, .14); --warn-ink: #f0b863; --absent: #4a4a4f; --focus: #a5b4fc; color-scheme: dark }
+:root[data-theme="light"] { color-scheme: light; }
 html, body { height: 100%; margin: 0; }
 body { background: var(--canvas); color: var(--ink); font-family: var(--sans); font-size: .875rem; line-height: 1.45; overflow: hidden; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 button, input, select { font: inherit; color: inherit; }
@@ -301,6 +306,7 @@ button.crop { display: block; width: 100%; padding: 0; border: 0; cursor: zoom-i
 </aside>
 
 <div class="float top-right">
+  <button class="zbtn" id="themeBtn" type="button"></button>
   <button class="zbtn primary" id="connectBtn" type="button" aria-expanded="false" aria-controls="connect">Connect</button>
 </div>
 <section class="panel" id="connect" aria-labelledby="connectTitle" hidden></section>
@@ -1292,11 +1298,29 @@ async function load(keepView) {
   fillWidths(); fillFreshness(); fillConnect();
   render(keepView && !first);
 }
+/* Light or dark: the person's choice, kept in this browser, or else the system's. */
+try { const kept = localStorage.getItem("flowmap.theme"); if (kept === "light" || kept === "dark") document.documentElement.dataset.theme = kept; } catch { document.documentElement.removeAttribute("data-theme"); }
+const dark = () => document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+function fillTheme() {
+  const b = $("themeBtn"), toDark = !dark();
+  b.innerHTML = icon(toDark ? "moon-linear" : "sun-2-linear");
+  b.setAttribute("aria-label", toDark ? "Switch to dark mode" : "Switch to light mode");
+  b.title = b.getAttribute("aria-label");
+}
 async function start() {
   ICONS = await (await fetch("/icons.json")).json();
   $("connectBtn").insertAdjacentHTML("afterbegin", icon("plug-circle-linear"));
   $("commentBtn").innerHTML = `${icon("chat-round-line-linear")}Comment`;
   $("sideBtn").innerHTML = icon("panel-left-linear");
+  fillTheme();
+  $("themeBtn").addEventListener("click", () => {
+    const next = dark() ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    fillTheme();
+    if (data) render(true);
+    // Without storage, the choice lasts until the page is reloaded.
+    try { localStorage.setItem("flowmap.theme", next); } catch { return; }
+  });
   let saved = null;
   try { saved = localStorage.getItem("flowmap.side"); } catch { saved = null; }
   setSide(saved ? saved === "open" : innerWidth >= 1024, false);

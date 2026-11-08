@@ -84,7 +84,7 @@ export function viewerData(root: string, port: number, agents: Agent[] = []) {
     }
   }
   return {
-    project: { name: config.name, liveUrl: config.liveUrl ?? null },
+    project: { name: config.name, liveUrl: config.liveUrl ?? null, root },
     widths: config.widths,
     live: view.live,
     branch: view.branch,

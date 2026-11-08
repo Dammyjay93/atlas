@@ -15,7 +15,13 @@ Flowmap is for people who build by prompting coding agents. Agents build many sc
 
 ## Set up
 
-Flowmap needs Node 22 or later and git.
+Flowmap needs Node 22 or later and git. Open your coding agent (Claude Code, Codex or Cursor) in your project and paste:
+
+> Set up Flowmap: run `npx flowmap setup` and do what it prints.
+
+Your agent sets Flowmap up, starts it in the background and opens it in your browser. Then it writes a recipe for each screen, starts your app and captures every screen, and you watch them appear. You never open a terminal.
+
+Flowmap is not on npm yet. Until it is, build it once and give your agent the built file instead of `npx flowmap`:
 
 ```sh
 git clone https://github.com/Dammyjay93/flowmap.git
@@ -24,18 +30,16 @@ pnpm install
 pnpm build
 ```
 
-In your project's root folder:
+> Set up Flowmap: run `node /path/to/flowmap/dist/cli.js setup` and do what it prints.
 
-```sh
-node /path/to/flowmap/dist/cli.js
-```
-
-The first time, this sets up Flowmap in the project. Then it starts Flowmap and opens the viewer in your browser. Set-up writes:
+Set-up writes:
 
 - `.flowmap/config.json`: the project name, the live ref (from your remote's default branch) and the screen widths;
 - `.flowmap/states/`: one recipe for each state;
 - `.flowmap/tasks/`: one file for each task;
-- a `.gitignore` line for `.flowmap/store/`, where captures are kept.
+- `.flowmap/.gitignore`, which keeps `.flowmap/store/`, where captures are kept, out of git. Set-up changes none of your own files.
+
+To start Flowmap yourself instead, run `npx flowmap` in your project's root folder.
 
 ### Connect your coding agent
 
@@ -62,7 +66,8 @@ For clients that start MCP servers themselves, `flowmap mcp` serves the same too
 | `flowmap serve` | Starts Flowmap on your computer: the viewer at `/` and the MCP endpoint at `/mcp`. `--port` changes the port from 4317 |
 | `flowmap connect` | Shows how to connect each coding agent. `--write <claude\|codex\|cursor>` adds Flowmap to that agent |
 | `flowmap states` | Lists state recipes, recipes that need repair, and the live and branch commits. Add `--json` for structured output |
-| `flowmap capture <state> --base-url <url>` | Captures one state at the current commit. `--cookie name=value` passes a test session; `--width` overrides the widths; `--live` files the capture under live's commit, for an app started from a copy of the project at live |
+| `flowmap setup` | For your coding agent: sets Flowmap up, starts it in the background on a free port, opens the viewer and prints what the agent does next |
+| `flowmap capture [<state>...] --base-url <url>` | Captures every state, or the ones named, at the current commit, in one browser and several at a time. `--cookie name=value` passes a test session; `--width` overrides the widths; `--live`, for one state, files the capture under live's commit, for an app started from a copy of the project at live |
 | `flowmap check --base-url <url>` | Captures every state at your current code and lists the screens that changed since before your change. `--cookie name=value` passes a test session |
 | `flowmap tasks` | Lists the changes you asked for. `--status` picks one status; add `--json` for structured output |
 | `flowmap capture <state> --base-url <url> --variant <set>/<name> --note <text> --route <path>` | Captures a version of a screen for the person to choose from, from the address that shows it, filed under its set |
@@ -78,14 +83,14 @@ For clients that start MCP servers themselves, `flowmap mcp` serves the same too
 | `flowmap_capture` with `variant` | Files a version of a screen under its set: `{ set, name, note, route }`, where `route` is the address that shows it, such as `/checkout?version=b`. The versions of a set appear side by side in the viewer |
 | `flowmap_version_start` | Marks a version as being built, before the agent changes code for it. The viewer shows its frame as a moving mosaic of its name until the agent captures it, then the mosaic dissolves into the screen |
 | `flowmap_compare` | Compares a state with live. Returns each width's status, each element that was added, removed, moved or looks different, with its exact box, and pictures of each area at live and at the current commit |
-| `flowmap_check` | Before an agent says a change is done: captures every state and lists every screen the change touched, including ones it did not mean to change, with the changed elements and pictures before and now. It replaces no captures |
+| `flowmap_check` | Before an agent says a change is done: captures every state and lists every screen the change touched, including ones it did not mean to change, with the changed elements and pictures before and now. On committed code it files the captures under the commit, so the map shows every screen |
 | `flowmap_tasks` | Lists the changes the person asked for, each with their words, the marked box, the element under it, its history and a picture with the box drawn on it. `status: approved` lists decisions to build from |
 | `flowmap_task_update` | Sets a task to `in-progress`, or to `ready-for-review` with a note once the agent has captured the state again. Flowmap attaches that capture as the after picture |
 | `flowmap_states` | Lists state recipes, recipes that need repair and why, and the live and branch commits resolved from git |
 
 ## State recipes
 
-A recipe tells an agent how to reach one state. Agents write a recipe when they build a screen, and repair it when it stops working.
+A recipe tells an agent how to reach one state. Agents write a recipe when they build a screen, and repair it when it stops working. Each recipe is one file, `.flowmap/states/<id>.json`, where `id` matches the file name. `id`, `name` and `route` are required; the rest are optional.
 
 ```json
 {
@@ -102,7 +107,7 @@ A recipe tells an agent how to reach one state. Agents write a recipe when they 
 }
 ```
 
-The agent runs `setup` and `session`. Flowmap opens `route` and runs `steps`. `fullPage` captures a long page in full. `leadsTo` draws the flow connectors between screens.
+Flowmap never runs `setup` or `session` itself: the agent runs them before it captures, and passes the session to Flowmap as cookies. Flowmap opens `route` and runs `steps`. `fullPage` captures a long page in full. `leadsTo` draws the flow connectors between screens.
 
 ## Compare with live
 
@@ -116,7 +121,7 @@ In the viewer, a changed screen says **Changed from live** and has each changed 
 
 ## Check before done
 
-Before your agent says a change is done, it calls `flowmap_check`. Flowmap captures every state at the agent's current code and compares each with its capture from before the change: this commit's captures while the change is uncommitted, or the newest earlier commit's once it is committed. The agent sees every screen the change touched, including screens it did not mean to change, and names what moved, appeared, disappeared or looks different. The check keeps its captures apart, so it never replaces a commit's captures.
+Before your agent says a change is done, it calls `flowmap_check`. Flowmap captures every state at the agent's current code and compares each with its capture from before the change: this commit's captures while the change is uncommitted, or the newest earlier commit's once it is committed. The agent sees every screen the change touched, including screens it did not mean to change, and names what moved, appeared, disappeared or looks different. On committed code, the check files its captures under the commit, so the map shows every screen at that commit. On uncommitted code, it keeps its captures apart and replaces nothing.
 
 ## Versions
 

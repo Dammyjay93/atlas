@@ -1,0 +1,727 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Atlas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400..600&display=swap">
+<style>
+/* One canvas of the project's screens, as the code renders them at one commit. Each page or flow is a panel; each screen sits at its real size
+   with its name above it. Controls float over the canvas. Frame names and control text keep one size at every zoom; screens and connectors zoom. */
+:root {
+  --ground: #ffffff; --canvas: #f5f5f5; --ink: #1c1c1e; --ink-2: #4a4a51; --ink-3: #6b6b72;
+  --line: #e6e6e3; --hover: #f1f1ef; --connector: #a3a3aa; --edge: rgba(20, 20, 24, .1); --hairline: rgba(20, 20, 24, .14); --section: rgba(255, 255, 255, .6);
+  --term: #18181b; --term-ink: #f4f4f5; --fresh: #4c9a4c; --warn-bg: #fbf1e1; --warn-ink: #8a5208; --absent: #bdbdb8;
+  --sel: #4f46e5; --focus: #4f46e5; --sel-grad: conic-gradient(from 200deg in oklch, #4f46e5, #0ea5e9 30%, #8b5cf6 62%, #4f46e5);
+  --ease: cubic-bezier(.2, 0, 0, 1);
+  --sans: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --ground: #1c1c1e; --canvas: #121213; --ink: #f2f2f3; --ink-2: #b4b4bb; --ink-3: #939399;
+  --line: #2c2c30; --hover: #28282b; --connector: #6b6b72; --edge: rgba(255, 255, 255, .1); --hairline: rgba(255, 255, 255, .14); --section: rgba(255, 255, 255, .025);
+  --term: #0c0c0e; --term-ink: #f4f4f5; --fresh: #6fbf6f; --warn-bg: rgba(224, 160, 64, .14); --warn-ink: #f0b863; --absent: #4a4a4f; --focus: #a5b4fc; color-scheme: dark } }
+html, body { height: 100%; margin: 0; }
+body { background: var(--canvas); color: var(--ink); font-family: var(--sans); font-size: .875rem; line-height: 1.45; overflow: hidden; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.float :focus-visible, .menu :focus-visible, .panel :focus-visible { outline-offset: -2px; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+svg { display: block; }
+
+/* Canvas */
+.viewport { position: fixed; inset: 0; overflow: hidden; background: var(--canvas); touch-action: none; cursor: grab; }
+.viewport.panning { cursor: grabbing; }
+.world { position: absolute; left: 0; top: 0; transform-origin: 0 0; --inv: 1; }
+.frame { position: absolute; padding: 0; border: 0; background: var(--ground); box-shadow: 0 0 0 calc(1px * var(--inv)) var(--edge); overflow: hidden; }
+.frame img { display: block; width: 100%; height: auto; pointer-events: none; user-select: none; }
+.frame.absent { background: transparent; box-shadow: none; outline: calc(1px * var(--inv)) dashed var(--absent); outline-offset: calc(-1px * var(--inv)); display: grid; place-content: center; gap: 16px; text-align: center; padding: 64px; }
+.frame.absent .t { font-size: 32px; font-weight: 600; color: var(--ink-2); }
+.frame.absent .w { font-size: 28px; line-height: 1.45; color: var(--ink-3); max-width: 760px; }
+.frame.absent code { font-family: var(--mono); }
+.frame:focus-visible { outline: calc(2px * var(--inv)) solid var(--focus); outline-offset: calc(6px * var(--inv)); }
+.frame.sel { outline: none; }
+.far .frame.absent { opacity: .45; }
+svg.wires { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+svg.wires path { fill: none; stroke: var(--connector); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+svg.wires .head, svg.wires circle { fill: var(--connector); stroke: none; }
+
+/* Names, section headers and connector labels: screen text placed over the canvas, one size at every zoom. */
+.names, .under { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.fname { position: absolute; container-type: inline-size; height: 20px; font-size: .8125rem; line-height: 1.2; white-space: nowrap; color: var(--ink-2); }
+.fname .row { display: flex; align-items: center; gap: 12px; height: 20px; }
+.fname .who { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1; overflow: hidden; }
+.fname .n { overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; max-width: 100%; }
+.fname .r { display: none; font-family: var(--mono); font-size: .75rem; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.fname.peek .r { display: inline; }
+.fname.sel { color: var(--ink); }
+.fname.sel .n { font-size: .9375rem; font-weight: 500; }
+@container (max-width: 380px) { .fname.peek .r { display: none; } }
+@container (max-width: 200px) { .warn .w { display: none; } }
+.warn { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 999px; background: var(--warn-bg); color: var(--warn-ink); font-size: .75rem; font-weight: 500; flex: none; }
+.warn svg { width: 12px; height: 12px; }
+.surf { position: absolute; background: var(--section); border: .5px solid var(--hairline); border-radius: 16px; }
+.sect { position: absolute; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; white-space: nowrap; }
+.sect .t { margin: 0; font-weight: 600; line-height: 1.2; letter-spacing: -.012em; color: var(--ink); }
+.sect .chips { display: flex; gap: 4px; }
+.chip { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border: .5px solid var(--hairline); border-radius: 999px; background: var(--ground); font-size: .75rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.edge { position: absolute; font-size: .75rem; line-height: 16px; color: var(--ink-3); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Selected screen: a gradient ring, square handles and its size, as in a design tool. */
+.selglow { position: absolute; box-shadow: 0 0 0 3px color-mix(in srgb, var(--sel) 12%, transparent), 0 0 28px color-mix(in srgb, var(--sel) 16%, transparent); }
+.selring { position: absolute; box-sizing: border-box; border: 1px solid transparent; background: var(--sel-grad) border-box; -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) padding-box exclude, linear-gradient(#000 0 0); }
+.selmark { position: absolute; z-index: 1; width: 6px; height: 6px; margin: -3px 0 0 -3px; background: var(--ground); border: 1px solid var(--sel); box-sizing: border-box; }
+.seldims { position: absolute; z-index: 1; transform: translateX(-50%); padding: 2px 8px; border-radius: 6px; background: var(--sel); color: #fff; font-size: .75rem; font-weight: 500; line-height: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Floating controls */
+.float { position: fixed; z-index: 10; display: flex; align-items: center; gap: 4px; background: var(--ground); border: .5px solid var(--hairline); border-radius: 12px; padding: 4px; }
+.sep { width: 1px; align-self: stretch; margin: 4px; background: var(--line); flex-shrink: 0; }
+/* All three bars are 32px of controls inside 4px padding, so their heights match. */
+.top-left, .top-right { height: 32px; }
+.top-left { top: calc(16px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); padding-left: 12px; max-width: calc(100% - 260px); }
+.brand { margin: 0; font-weight: 600; font-size: .875rem; line-height: 1.2; white-space: nowrap; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--fresh); flex-shrink: 0; margin-left: 6px; }
+.dot.stale { background: var(--warn-ink); }
+.ver { padding: 0 6px; font-size: .8125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ver code { font-family: var(--mono); font-size: .75rem; color: var(--ink-2); }
+.top-left .warn { margin-right: 4px; }
+.act { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; font-size: .8125rem; color: var(--ink-2); white-space: nowrap; }
+.act i { width: 7px; height: 7px; border-radius: 50%; background: var(--sel); }
+.top-right { top: calc(16px + env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); }
+.bottom { bottom: calc(16px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); max-width: calc(100% - 32px); }
+.select { position: relative; flex-shrink: 0; min-width: 0; }
+.select select { display: none; }
+.selbtn { display: inline-flex; align-items: center; gap: 6px; height: 32px; max-width: 100%; padding: 0 8px 0 10px; border: 0; border-radius: 8px; background: transparent; font-size: .8125rem; color: var(--ink); white-space: nowrap; }
+.selbtn span { overflow: hidden; text-overflow: ellipsis; }
+.selbtn svg { width: 12px; height: 12px; flex: none; color: var(--ink-3); }
+.selbtn[aria-expanded="true"] { background: var(--hover); }
+.menu { position: absolute; z-index: 30; left: 0; bottom: calc(100% + 8px); min-width: max(100%, 200px); max-height: 60vh; overflow-y: auto; padding: 4px; background: var(--ground); border: .5px solid var(--hairline); border-radius: 12px; outline: none; }
+.opt { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px 0 8px; border-radius: 8px; font-size: .8125rem; color: var(--ink); white-space: nowrap; cursor: pointer; }
+.opt svg { width: 14px; height: 14px; flex: none; color: var(--sel); visibility: hidden; }
+.opt[aria-selected="true"] svg { visibility: visible; }
+.opt.active { background: var(--hover); }
+.seg { display: inline-flex; background: var(--hover); border-radius: 9px; padding: 2px; gap: 2px; flex-shrink: 0; }
+.seg button { display: inline-grid; place-items: center; border: 0; background: transparent; height: 28px; padding: 0 12px; border-radius: 7px; color: var(--ink-2); font-size: .8125rem; }
+.seg button[aria-pressed="true"] { background: var(--ground); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .1); font-weight: 500; }
+.widths button { padding: 0 10px; }
+.widths svg { width: 15px; height: 15px; }
+.zbtn { display: inline-grid; place-items: center; border: 0; background: transparent; height: 32px; min-width: 32px; padding: 0 8px; border-radius: 8px; color: var(--ink-2); font-size: .8125rem; }
+.zbtn svg { width: 14px; height: 14px; }
+.zbtn.primary { display: inline-flex; align-items: center; gap: 6px; padding: 0 12px 0 10px; background: var(--hover); color: var(--ink); font-weight: 500; letter-spacing: -0.005em; }
+.zbtn.primary[aria-expanded="true"] { background: color-mix(in srgb, var(--hover), var(--ink) 7%); }
+
+/* Connect panel: one row for each coding agent, each with one action. A connected agent shows that in its row.
+   Until the agent has written recipes, the footer holds the sentence to ask it. */
+.panel { position: fixed; z-index: 20; top: calc(64px + env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); width: min(320px, calc(100% - 32px)); max-height: calc(100% - 96px); overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box; background: var(--ground); border: .5px solid var(--hairline); border-radius: 14px; }
+.panel h2 { margin: 0; padding: 14px 16px 12px; font-size: .8125rem; font-weight: 600; border-bottom: .5px solid var(--hairline); }
+.clients { margin: 0; padding: 0; list-style: none; }
+.clients li { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 0 12px 0 16px; }
+.clients li + li { border-top: .5px solid var(--hairline); }
+.logo { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; border: .5px solid var(--hairline); color: var(--ink); }
+.logo svg { width: 16px; height: 16px; }
+.clients .nm { flex: 1; min-width: 0; font-size: .8125rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rowbtn { flex: none; display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border: .5px solid var(--hairline); border-radius: 7px; background: var(--ground); color: var(--ink); font: 500 .75rem/1 var(--sans); text-decoration: none; white-space: nowrap; box-shadow: 0 1px 1px rgba(0, 0, 0, .04); }
+.linked { flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: .75rem; color: var(--ink-2); white-space: nowrap; }
+.linked i { width: 6px; height: 6px; border-radius: 50%; background: var(--fresh); }
+.ask { padding: 12px 16px 16px; border-top: .5px solid var(--hairline); background: var(--canvas); }
+.ask p { margin: 0 0 8px; font-size: .75rem; color: var(--ink-3); }
+.say { display: flex; align-items: center; gap: 8px; padding: 4px 4px 4px 12px; border: .5px solid var(--hairline); border-radius: 8px; background: var(--ground); font-size: .8125rem; }
+.say span { flex: 1; min-width: 0; }
+.copy { flex: none; display: inline-grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-2); }
+.copy svg { width: 14px; height: 14px; }
+
+/* Selected screen's actions, attached inside the top of the frame. */
+.tool { position: fixed; z-index: 15; display: flex; align-items: center; gap: 4px; padding: 4px; background: var(--ink); color: var(--ground); border-radius: 12px; white-space: nowrap; }
+.tbtn { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: var(--ground); font-size: .8125rem; font-weight: 500; text-decoration: none; }
+.tbtn svg { width: 15px; height: 15px; color: color-mix(in srgb, var(--ground) 70%, transparent); }
+.tbtn:focus-visible { outline: 2px solid var(--ground); outline-offset: -2px; }
+
+.empty { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; }
+.empty .t { font-weight: 600; font-size: 1rem; line-height: 1.3; margin: 0 0 6px; }
+.empty .s { color: var(--ink-2); margin: 0 auto 16px; max-width: 380px; text-wrap: pretty; }
+.btn { height: 34px; padding: 0 14px; border-radius: 8px; border: 0; background: var(--ink); color: var(--ground); font-weight: 500; }
+
+@media (hover: hover) {
+  .zbtn:not(.primary):hover, .selbtn:hover { background: var(--hover); color: var(--ink); }
+  .zbtn.primary:hover { background: color-mix(in srgb, var(--hover), var(--ink) 7%); }
+  .rowbtn:hover { background: var(--hover); }
+  .copy:hover { background: var(--hover); color: var(--ink); }
+  .tbtn:hover { background: color-mix(in srgb, var(--ground) 14%, transparent); }
+  .seg button:not([aria-pressed="true"]):hover { color: var(--ink); }
+}
+@media (max-width: 640px) {
+  .top-left .brand, .top-left .sep { display: none; }
+  .top-left { padding-left: 4px; right: calc(max(16px, env(safe-area-inset-right, 0px)) + 104px); max-width: none; }
+  .bottom { left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); transform: none; max-width: none; flex-wrap: wrap; row-gap: 4px; }
+  .bottom .sep { display: none; }
+  .bottom .widths + .sep { display: block; flex-basis: 100%; height: 0; margin: 0; background: none; }
+  .bottom .select { flex: 1 1 0; } .bottom .selbtn { width: 100%; justify-content: space-between; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .world.anim { transition: transform .35s var(--ease); }
+  .act i { animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+}
+</style>
+</head>
+<body>
+<main class="viewport" id="vp" aria-label="Screens">
+  <div class="under" id="under" aria-hidden="true"></div>
+  <div class="world" id="world"></div>
+  <div class="names" id="names" aria-hidden="true"></div>
+</main>
+<div class="empty" id="empty" hidden><div><p class="t" id="emptyTitle"></p><p class="s" id="emptyText"></p><button class="btn" id="emptyConnect" type="button">Connect your agent</button></div></div>
+
+<header class="float top-left">
+  <h1 class="brand" id="brand">Atlas</h1>
+  <span class="sep"></span>
+  <span class="dot" id="vdot"></span>
+  <span class="ver" id="ver"></span>
+  <span class="warn" id="fresh" hidden></span>
+  <span class="act" id="act" role="status" hidden></span>
+</header>
+
+<div class="float top-right">
+  <button class="zbtn primary" id="connectBtn" type="button" aria-expanded="false" aria-controls="connect">Connect</button>
+</div>
+<section class="panel" id="connect" aria-labelledby="connectTitle" hidden></section>
+
+<nav class="float bottom" aria-label="View">
+  <div class="seg mode" role="group" aria-label="Arrange by">
+    <button type="button" data-view="pages" aria-pressed="false">Pages</button>
+    <button type="button" data-view="flows" aria-pressed="true">Flows</button>
+  </div>
+  <span class="sep"></span>
+  <div class="seg widths" role="group" aria-label="Screen width" id="widths"></div>
+  <span class="sep"></span>
+  <div class="select"><select id="pickSel" aria-label="Flow"></select></div>
+  <div class="select"><select id="areaSel" aria-label="Area"></select></div>
+</nav>
+<div class="tool" id="tool" role="toolbar" aria-label="Selected screen" hidden></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const vp = $("vp"), world = $("world"), names = $("names"), under = $("under"), tool = $("tool");
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const svgNS = "http://www.w3.org/2000/svg";
+let ICONS = {};
+const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] ?? ""}</svg>`;
+const phoneView = () => innerWidth < 640;
+
+let data = null;
+let view = { x: 0, y: 0, s: 1 }, mode = "flows", width = 0, area = "", pick = "", selected = null;
+let rects = {}, firstBox = null, labels = [], sections = [], edges = [];
+
+const byId = () => new Map(data.states.map((s) => [s.id, s]));
+const shotOf = (id) => data.shots[id]?.[String(width)] ?? null;
+const heightOf = (id) => shotOf(id)?.height ?? (width >= 768 ? 900 : 844);
+const inArea = (s) => !area || (s.area ?? "") === area;
+
+/* ---------- Drawing ---------- */
+function put(tag, cls, x, y, w, h, html) {
+  const e = document.createElement(tag);
+  e.className = cls; e.style.left = x + "px"; e.style.top = y + "px";
+  if (w != null) e.style.width = w + "px";
+  if (h != null) e.style.height = h + "px";
+  if (html != null) e.innerHTML = html;
+  world.appendChild(e);
+  return e;
+}
+/* A screen at its real size, with its name kept above it at one size. */
+function screen(s, x, y) {
+  const shot = shotOf(s.id), fw = width, fh = heightOf(s.id);
+  const f = put("button", "frame" + (shot ? "" : " absent"), x, y, fw, fh,
+    shot ? `<img src="${esc(shot.png)}" alt="" decoding="async">` : `<span class="t">Not captured yet</span><span class="w">Ask your coding agent to capture <code>${esc(s.id)}</code>.</span>`);
+  f.type = "button"; f.dataset.id = s.id;
+  f.setAttribute("aria-label", `${s.name}${shot ? "" : ", not captured yet"}${shot?.landedOn ? `, landed on ${shot.landedOn}` : ""}`);
+  if (selected === s.id) f.classList.add("sel");
+  const n = document.createElement("div");
+  n.className = "fname" + (selected === s.id ? " sel" : "");
+  n.dataset.id = s.id;
+  const warn = shot?.landedOn ? `<span class="warn" title="The app opened ${esc(shot.landedOn)} instead of ${esc(s.route)}">${icon("danger-triangle-linear")}<span class="w">Landed on ${esc(shot.landedOn)}</span></span>` : "";
+  n.innerHTML = `<div class="row"><span class="who"><span class="n">${esc(s.name)}</span><span class="r">${esc(s.route)}</span></span>${warn}</div>`;
+  names.appendChild(n);
+  labels.push({ n, x, y, w: fw, h: fh });
+  return fh;
+}
+/* A section: an accessible heading, a surface under its screens, and a header placed with the frame names. */
+function heading(y, title) {
+  put("h2", "vh", 0, y, null, null, esc(title));
+  const surf = document.createElement("div"); surf.className = "surf"; under.appendChild(surf);
+  const el = document.createElement("div"); el.className = "sect";
+  el.innerHTML = `<span class="t">${esc(title)}</span><span class="chips"></span>`;
+  names.appendChild(el);
+  const from = labels.length;
+  return (prefix) => {
+    const drawn = labels.slice(from), ids = drawn.map((l) => l.n.dataset.id), missing = ids.filter((id) => !shotOf(id)).length;
+    el.querySelector(".chips").innerHTML = [prefix, `${ids.length} ${ids.length === 1 ? "screen" : "screens"}`, missing ? `${missing} not captured` : ""].filter(Boolean).map((c) => `<span class="chip">${esc(c)}</span>`).join("");
+    sections.push({ surf, el, y, w: Math.max(...drawn.map((l) => l.x + l.w)), bottom: Math.max(...drawn.map((l) => l.y + l.h)) });
+  };
+}
+function wire(svg, d, cls) { const p = document.createElementNS(svgNS, "path"); p.setAttribute("d", d); if (cls) p.setAttribute("class", cls); svg.appendChild(p); }
+function head(svg, x, y) { wire(svg, `M${x} ${y} l-22 -12 v24 z`, "head"); }
+function junction(svg, x, y) { const c = document.createElementNS(svgNS, "circle"); c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", 8); svg.appendChild(c); }
+const measure = document.createElement("canvas").getContext("2d");
+function label(text, x1, x2, y) {
+  const el = document.createElement("div"); el.className = "edge"; el.textContent = text; names.appendChild(el);
+  measure.font = `12px ${getComputedStyle(document.body).fontFamily}`;
+  edges.push({ el, x1, x2, y, need: Math.ceil(measure.measureText(text).width) + 8 });
+}
+
+/* Flows come from the recipes' leadsTo links: each group of linked states is one flow, drawn as trees from the states nothing leads to. */
+function flows() {
+  const states = data.states.filter(inArea), ids = new Map(states.map((s) => [s.id, s]));
+  const parent = new Map(states.map((s) => [s.id, s.id]));
+  const find = (id) => { while (parent.get(id) !== id) id = parent.get(id); return id; };
+  const into = new Map();
+  for (const s of states) for (const e of s.leadsTo ?? []) {
+    if (!ids.has(e.state)) continue;
+    parent.set(find(s.id), find(e.state));
+    into.set(e.state, (into.get(e.state) ?? 0) + 1);
+  }
+  const groups = new Map();
+  for (const s of states) {
+    if (!(s.leadsTo ?? []).some((e) => ids.has(e.state)) && !into.has(s.id)) continue;
+    const key = find(s.id);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(s);
+  }
+  return [...groups.values()].map((members) => {
+    const roots = members.filter((s) => !into.has(s.id));
+    const starts = roots.length ? roots : [members[0]];
+    const seen = new Set();
+    const tree = (s) => {
+      seen.add(s.id);
+      const next = (s.leadsTo ?? []).filter((e) => ids.has(e.state) && !seen.has(e.state)).map((e) => {
+        seen.add(e.state);
+        return [e.action, e.state];
+      }).map(([action, id]) => [action, tree(ids.get(id))]);
+      return next.length ? { s, next } : { s };
+    };
+    return { id: starts[0].id, name: starts[0].name, trees: starts.map(tree) };
+  });
+}
+
+/* Flows: each tree left to right, one row for each end screen; a screen sits on the row of its first next screen. */
+function drawFlows() {
+  const FW = width, DH = width >= 768 ? 900 : 844, COL = FW + 560, GAPY = 240, BETWEEN = 1500;
+  const svg = document.createElementNS(svgNS, "svg"); svg.setAttribute("class", "wires");
+  let top = 0, maxX = 0;
+  for (const fl of flows().filter((f) => !pick || f.id === pick)) {
+    const counted = heading(top, fl.name);
+    let rows = 0; const rowH = [];
+    const place = (node, depth) => {
+      node.depth = depth;
+      if (!node.next) node.row = rows++;
+      else { node.next.forEach(([, child]) => place(child, depth + 1)); node.row = node.next[0][1].row; }
+      rowH[node.row] = Math.max(rowH[node.row] || 0, heightOf(node.s.id));
+    };
+    fl.trees.forEach((t) => place(t, 0));
+    const rowY = []; rowH.reduce((y, h, i) => { rowY[i] = y; return y + h + GAPY; }, top);
+    let bottom = top;
+    const draw = (node) => {
+      const x = node.depth * COL, y = rowY[node.row];
+      bottom = Math.max(bottom, y + screen(node.s, x, y));
+      maxX = Math.max(maxX, x + FW);
+      if (!node.next) return;
+      const py = y + DH / 2, tx = x + FW + 80;
+      wire(svg, `M${x + FW + 16} ${py} H${tx}`);
+      if (node.next.length > 1) junction(svg, tx, py);
+      for (const [text, child] of node.next) {
+        const cx = child.depth * COL, cy = rowY[child.row] + DH / 2;
+        if (cy === py) wire(svg, `M${tx} ${py} H${cx - 24}`);
+        else wire(svg, `M${tx} ${py} V${cy - 32} Q${tx} ${cy} ${tx + 32} ${cy} H${cx - 24}`);
+        head(svg, cx - 8, cy);
+        label(text, tx + 40, cx - 40, cy);
+        draw(child);
+      }
+    };
+    fl.trees.forEach(draw);
+    counted("");
+    rects[fl.id] = { x: 0, y: top, h: DH };
+    if (!firstBox) firstBox = { y: top, h: DH };
+    top = bottom + BETWEEN;
+  }
+  world.appendChild(svg);
+  return { w: maxX, h: Math.max(0, top - BETWEEN) };
+}
+
+/* Pages: one panel for each page the recipes name, its screens in one row. */
+function pages() {
+  const out = new Map();
+  for (const s of data.states.filter(inArea)) {
+    const key = `${s.area ?? ""}\u0000${s.page ?? s.area ?? "Screens"}`;
+    if (!out.has(key)) out.set(key, { key, area: s.area ?? "", title: s.page ?? s.area ?? "Screens", states: [] });
+    out.get(key).states.push(s);
+  }
+  return [...out.values()].sort((a, b) => a.area.localeCompare(b.area) || a.title.localeCompare(b.title));
+}
+function drawPages() {
+  const GAP = width >= 768 ? 160 : 120, BETWEEN = 1500;
+  let top = 0, maxX = 0;
+  for (const group of pages()) {
+    const counted = heading(top, group.title);
+    let rowH = 0;
+    group.states.forEach((s, i) => { rowH = Math.max(rowH, screen(s, i * (width + GAP), top)); maxX = Math.max(maxX, i * (width + GAP) + width); });
+    counted(group.area);
+    rects[group.key] = { x: 0, y: top, h: Math.min(rowH, width >= 768 ? 900 : 844) };
+    if (!firstBox) firstBox = { y: top, h: width >= 768 ? 900 : 844 };
+    top += rowH + BETWEEN;
+  }
+  return { w: maxX, h: Math.max(0, top - BETWEEN) };
+}
+
+function render(keepView) {
+  world.innerHTML = ""; names.innerHTML = ""; under.innerHTML = ""; labels = []; sections = []; edges = []; rects = {}; firstBox = null;
+  const size = mode === "flows" ? drawFlows() : drawPages();
+  world.style.width = size.w + "px"; world.style.height = size.h + "px";
+  const nothing = !data.states.length;
+  $("empty").hidden = !nothing;
+  if (nothing) {
+    $("emptyTitle").textContent = "No screens yet";
+    $("emptyText").textContent = data.invalid.length
+      ? `${data.invalid.length} ${data.invalid.length === 1 ? "recipe needs" : "recipes need"} repair. Ask your coding agent to fix them; it can see the problems with atlas_states.`
+      : "Ask your coding agent to set up Atlas for this app. It writes a recipe for each screen and captures it here.";
+  }
+  if (keepView) apply(); else fitFirst();
+  if (selected && document.querySelector(`.frame[data-id="${CSS.escape(selected)}"]`)) select(selected, true);
+  else if (selected) deselect();
+}
+
+/* ---------- The canvas ---------- */
+function room() {
+  const top = document.querySelector(".top-left").getBoundingClientRect().bottom + 24;
+  const bot = innerHeight - document.querySelector(".bottom").getBoundingClientRect().top + 24;
+  return { left: phoneView() ? 16 : 48, top, w: vp.clientWidth, h: vp.clientHeight - top - bot };
+}
+function apply(anim) {
+  world.classList.toggle("anim", !!anim);
+  world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.s})`;
+  world.style.setProperty("--inv", String(1 / view.s));
+  world.classList.toggle("far", view.s < 0.22);
+  placeNames(anim);
+  if (anim) { tool.style.opacity = "0"; setTimeout(() => { placeTool(); tool.style.opacity = ""; world.classList.remove("anim"); }, 380); } else placeTool();
+}
+/* The screen space a section header takes above its first row: inset, title, count chips, gap, frame names. */
+function stack(s) {
+  const named = s >= 0.12, t = named ? 20 : 13, pad = named ? 24 : 10, g2 = named ? 32 : 10;
+  return { named, t, g1: pad, pad, h: pad + Math.round(t * 1.2) + (named ? 28 : 0) + g2 + (named ? 28 : 0) };
+}
+let nameTimer = 0;
+function placeNames(anim) {
+  clearTimeout(nameTimer);
+  const go = () => {
+    const s = view.s, k = stack(s);
+    for (const { n, x, y, w } of labels) {
+      const sw = w * s;
+      n.hidden = sw < 72 || !k.named;
+      if (n.hidden) continue;
+      n.style.left = view.x + x * s + "px"; n.style.top = view.y + y * s - 28 + "px"; n.style.width = sw + "px";
+    }
+    let marks = names.querySelector(".selmarks");
+    if (!marks) {
+      marks = document.createElement("div"); marks.className = "selmarks";
+      marks.innerHTML = '<i class="selmark"></i><i class="selmark"></i><i class="selmark"></i><i class="selmark"></i><span class="seldims"></span><div class="selring"></div><div class="selglow"></div>';
+      names.appendChild(marks);
+    }
+    const sel = selected && labels.find((l) => l.n.dataset.id === selected);
+    marks.hidden = !sel;
+    if (sel) {
+      const L = view.x + sel.x * s, T = view.y + sel.y * s, R = L + sel.w * s, B = T + sel.h * s;
+      [[L, T], [R, T], [L, B], [R, B]].forEach(([x, y], i) => { marks.children[i].style.left = x + "px"; marks.children[i].style.top = y + "px"; });
+      const d = marks.children[4]; d.textContent = `${sel.w} × ${sel.h}`; d.style.left = (L + R) / 2 + "px"; d.style.top = B + 10 + "px";
+      for (const el of [marks.children[5], marks.children[6]]) Object.assign(el.style, { left: L + "px", top: T + "px", width: R - L + "px", height: B - T + "px" });
+    }
+    for (const { surf, el, y, w, bottom } of sections) {
+      const top = view.y + y * s - k.h;
+      surf.style.cssText = `left:${view.x - k.pad}px;top:${top}px;width:${w * s + 2 * k.pad}px;height:${(bottom - y) * s + k.h + k.pad}px;border-radius:${k.named ? 16 : 8}px`;
+      el.style.cssText = `left:${view.x}px;top:${top + k.g1}px`;
+      el.firstChild.style.fontSize = k.t + "px";
+      el.children[1].hidden = !k.named;
+    }
+    for (const { el, x1, x2, y, need } of edges) {
+      const w = (x2 - x1) * s;
+      el.hidden = s < 0.22 || w < need;
+      if (!el.hidden) el.style.cssText = `left:${view.x + x1 * s}px;top:${view.y + y * s - 22}px;width:${w}px`;
+    }
+  };
+  if (anim) { names.style.opacity = "0"; nameTimer = setTimeout(() => { go(); names.style.opacity = ""; }, 360); } else go();
+}
+function zoomAt(f, cx, cy, anim) {
+  const s = Math.min(4, Math.max(0.05, view.s * f)), k = s / view.s;
+  view = { x: cx - (cx - view.x) * k, y: cy - (cy - view.y) * k, s }; apply(anim);
+}
+function fitFirst() { goRect(firstBox || { x: 0, y: 0, h: 1000 }, false); }
+function fitAll() {
+  const r = room(); r.left = Math.max(r.left, 40);
+  const s = Math.min(1, Math.max(0.03, Math.min((r.w - r.left * 2) / (world.offsetWidth || 1), r.h / (world.offsetHeight || 1))));
+  view = { x: r.left, y: r.top + stack(s).h, s }; apply(true);
+}
+function goRect(rect, anim = true) {
+  const r = room(); r.left = Math.max(r.left, 40);
+  let s = Math.min(1, Math.max(0.05, (r.h - stack(1).h) / rect.h));
+  s = Math.min(1, Math.max(0.05, (r.h - stack(s).h) / rect.h));
+  view = { x: r.left - (rect.x || 0) * s, y: r.top + stack(s).h - rect.y * s, s }; apply(anim);
+}
+
+/* ---------- Selection ---------- */
+function markSel() {
+  document.querySelectorAll(".frame.sel, .fname.sel").forEach((e) => e.classList.remove("sel"));
+  if (selected) document.querySelectorAll(`.frame[data-id="${CSS.escape(selected)}"], .fname[data-id="${CSS.escape(selected)}"]`).forEach((e) => e.classList.add("sel"));
+  placeNames();
+}
+function select(id, quiet) {
+  selected = id; markSel();
+  const s = byId().get(id);
+  const open = data.project.liveUrl && s?.route ? `<a class="tbtn" href="${esc(data.project.liveUrl.replace(/\/$/, "") + s.route)}" target="_blank" rel="noopener">${icon("square-share-line-linear")}Open live page</a>` : "";
+  tool.innerHTML = open;
+  tool.hidden = !open;
+  if (!quiet && open && tool.dataset.id !== id) tool.animate?.([{ opacity: 0, translate: "0 -6px" }, { opacity: 1, translate: "0 0" }], { duration: matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 180, easing: "ease-out" });
+  tool.dataset.id = id;
+  placeTool();
+}
+function deselect() { selected = null; markSel(); tool.hidden = true; tool.dataset.id = ""; }
+function placeTool() {
+  if (!selected || tool.hidden) return;
+  const f = document.querySelector(`.frame[data-id="${CSS.escape(selected)}"]`);
+  if (!f) { tool.hidden = true; return; }
+  const r = f.getBoundingClientRect(), w = tool.offsetWidth, h = tool.offsetHeight;
+  const top = document.querySelector(".top-left").getBoundingClientRect().bottom + 12, bottom = document.querySelector(".bottom").getBoundingClientRect().top - 12 - h;
+  tool.style.left = Math.min(innerWidth - w - 12, Math.max(12, (Math.max(r.left, 0) + Math.min(r.right, innerWidth)) / 2 - w / 2)) + "px";
+  tool.style.top = Math.min(bottom, Math.max(top, r.top + 16)) + "px";
+}
+
+/* ---------- Input ---------- */
+const pts = new Map(); let drag = null, pinch = null;
+vp.addEventListener("pointerdown", (e) => {
+  vp.setPointerCapture(e.pointerId);
+  pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pts.size === 1) drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: false, t: e.target.closest(".frame") };
+  if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), s: view.s }; drag = null; }
+});
+vp.addEventListener("pointermove", (e) => {
+  if (!pts.has(e.pointerId)) return;
+  pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && pts.size === 2) { const [a, b] = [...pts.values()]; zoomAt(pinch.s * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d / view.s, (a.x + b.x) / 2, (a.y + b.y) / 2); return; }
+  if (!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  if (!drag.moved && Math.hypot(dx, dy) > 4) { drag.moved = true; vp.classList.add("panning"); }
+  if (drag.moved) { view.x = drag.vx + dx; view.y = drag.vy + dy; apply(); }
+});
+function up(e) {
+  pts.delete(e.pointerId); if (pts.size < 2) pinch = null;
+  if (drag && !pts.size) {
+    if (!drag.moved) { if (drag.t) select(drag.t.dataset.id); else deselect(); }
+    drag = null; vp.classList.remove("panning");
+  }
+}
+vp.addEventListener("pointerup", up); vp.addEventListener("pointercancel", up);
+vp.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY);
+  else { view.x -= e.deltaX; view.y -= e.deltaY; apply(); }
+}, { passive: false });
+vp.addEventListener("keydown", (e) => { const f = e.target.closest?.(".frame"); if (f && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); select(f.dataset.id); } });
+/* Tabbing to a screen outside the view moves the canvas to it, measured from the target view rather than the moving box. */
+vp.addEventListener("focusin", (e) => {
+  const f = e.target.closest(".frame"); if (!f) return;
+  vp.scrollLeft = 0; vp.scrollTop = 0;
+  const r = room(), s = view.s;
+  const l = view.x + parseFloat(f.style.left) * s, t = view.y + parseFloat(f.style.top) * s;
+  let dx = 0, dy = 0;
+  if (l < r.left || l + f.offsetWidth * s > r.w - r.left) dx = r.left - l;
+  if (t < r.top || t + Math.min(f.offsetHeight * s, r.h) > r.top + r.h) dy = r.top - t;
+  if (dx || dy) { view.x += dx; view.y += dy; apply(true); }
+});
+const peek = (e, on) => { const f = e.target.closest?.(".frame"); if (f) names.querySelector(`.fname[data-id="${CSS.escape(f.dataset.id)}"]`)?.classList.toggle("peek", on); };
+vp.addEventListener("pointerover", (e) => peek(e, true)); vp.addEventListener("pointerout", (e) => peek(e, false));
+vp.addEventListener("focusin", (e) => peek(e, true)); vp.addEventListener("focusout", (e) => peek(e, false));
+vp.addEventListener("scroll", () => { vp.scrollLeft = 0; vp.scrollTop = 0; });
+
+/* Menus: each native select keeps the value and fires change; a button and a list in the app's style stand in for it. */
+function menu(sel) {
+  const wrap = sel.parentElement, btn = document.createElement("button"), list = document.createElement("div");
+  btn.type = "button"; btn.className = "selbtn"; btn.setAttribute("aria-haspopup", "listbox"); btn.setAttribute("aria-expanded", "false");
+  list.className = "menu"; list.setAttribute("role", "listbox"); list.tabIndex = -1; list.hidden = true; list.id = sel.id + "-list";
+  btn.setAttribute("aria-controls", list.id);
+  wrap.prepend(btn); wrap.appendChild(list);
+  let active = 0;
+  const opts = () => [...sel.options];
+  const sync = () => { const t = sel.selectedOptions[0]?.textContent || ""; btn.innerHTML = `<span>${esc(t)}</span>${icon("alt-arrow-down-linear")}`; btn.setAttribute("aria-label", `${sel.getAttribute("aria-label")}: ${t}`); };
+  const paint = () => [...list.children].forEach((o, i) => { o.classList.toggle("active", i === active); if (i === active) { list.setAttribute("aria-activedescendant", o.id); o.scrollIntoView({ block: "nearest" }); } });
+  const close = (back) => { list.hidden = true; btn.setAttribute("aria-expanded", "false"); if (back) btn.focus(); };
+  const choose = (i) => { const o = opts()[i]; if (o && sel.value !== o.value) { sel.value = o.value; sel.dispatchEvent(new Event("change")); } sync(); close(true); };
+  const open = () => {
+    list.innerHTML = opts().map((o, i) => `<div class="opt" role="option" id="${sel.id}-o${i}" aria-selected="${o.selected}" data-i="${i}">${icon("check-linear")}${esc(o.textContent)}</div>`).join("");
+    active = Math.max(0, sel.selectedIndex); list.hidden = false; btn.setAttribute("aria-expanded", "true"); paint(); list.focus();
+  };
+  btn.addEventListener("click", () => (list.hidden ? open() : close(true)));
+  btn.addEventListener("keydown", (e) => { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); open(); } });
+  list.addEventListener("click", (e) => { const o = e.target.closest(".opt"); if (o) choose(Number(o.dataset.i)); });
+  list.addEventListener("pointermove", (e) => { const o = e.target.closest(".opt"); if (o && Number(o.dataset.i) !== active) { active = Number(o.dataset.i); paint(); } });
+  list.addEventListener("keydown", (e) => {
+    const n = list.children.length;
+    if (e.key === "ArrowDown") active = Math.min(n - 1, active + 1);
+    else if (e.key === "ArrowUp") active = Math.max(0, active - 1);
+    else if (e.key === "Home") active = 0;
+    else if (e.key === "End") active = n - 1;
+    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); choose(active); return; }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(true); return; }
+    else if (e.key === "Tab") { close(false); return; }
+    else return;
+    e.preventDefault(); paint();
+  });
+  document.addEventListener("pointerdown", (e) => { if (!list.hidden && !wrap.contains(e.target)) close(false); });
+  sel.sync = sync; sync();
+}
+
+/* ---------- Controls ---------- */
+function fillMenus() {
+  const pickSel = $("pickSel"), areaSel = $("areaSel");
+  pickSel.setAttribute("aria-label", mode === "flows" ? "Flow" : "Page");
+  pickSel.innerHTML = mode === "flows"
+    ? `<option value="">All flows</option>` + flows().map((f) => `<option value="${esc(f.id)}">${esc(f.name)}</option>`).join("")
+    : `<option value="">All pages</option>` + pages().map((g) => `<option value="${esc(g.key)}">${esc(g.title)}</option>`).join("");
+  pickSel.value = mode === "flows" ? pick : "";
+  const areas = [...new Set(data.states.map((s) => s.area).filter(Boolean))].sort();
+  areaSel.innerHTML = `<option value="">All areas</option>` + areas.map((a) => `<option>${esc(a)}</option>`).join("");
+  areaSel.value = areas.includes(area) ? area : "";
+  areaSel.parentElement.hidden = areas.length < 2;
+  pickSel.sync?.(); areaSel.sync?.();
+}
+function setMode(m) {
+  mode = m; pick = "";
+  document.querySelectorAll(".mode button").forEach((o) => o.setAttribute("aria-pressed", String(o.dataset.view === m)));
+}
+function fillWidths() {
+  if (!data.widths.includes(width)) width = phoneView() ? Math.min(...data.widths) : data.widths[0];
+  $("widths").innerHTML = data.widths.map((w) => `<button type="button" data-w="${w}" aria-pressed="${w === width}" aria-label="${w} pixels wide" title="${w} pixels wide">${icon(w >= 768 ? "monitor-linear" : "smartphone-linear")}</button>`).join("");
+}
+document.querySelectorAll(".mode button").forEach((t) => t.addEventListener("click", () => { setMode(t.dataset.view); fillMenus(); deselect(); render(); }));
+$("widths").addEventListener("click", (e) => { const b = e.target.closest("[data-w]"); if (!b) return; width = Number(b.dataset.w); fillWidths(); render(); });
+$("pickSel").addEventListener("change", (e) => {
+  const v = e.target.value;
+  if (mode === "flows") { pick = v; render(); }
+  else if (v && rects[v]) goRect(rects[v]); else fitFirst();
+});
+$("areaSel").addEventListener("change", (e) => { area = e.target.value; pick = ""; fillMenus(); render(); });
+
+/* The top bar: which commit the screens show, and how far the code has moved since. */
+function fillFreshness() {
+  $("brand").textContent = data.project.name;
+  document.title = `${data.project.name} · Atlas`;
+  const shown = data.shown, branch = data.branch.name ?? "detached";
+  $("ver").innerHTML = shown ? `${esc(branch)} · <code>${esc(shown.commit)}</code>` : `${esc(branch)} · <code>${esc(data.branch.commit ?? "no commit")}</code>`;
+  const anyUncommitted = Object.values(data.shots).some((byWidth) => Object.values(byWidth).some((e) => e.uncommitted));
+  let note = "";
+  if (!shown) note = data.states.length ? "Nothing captured yet" : "";
+  else if (shown.commit !== data.branch.commit) note = shown.behind == null ? "Captured on another branch" : `${shown.behind} ${shown.behind === 1 ? "commit" : "commits"} behind`;
+  else if (anyUncommitted) note = "Includes uncommitted changes";
+  $("fresh").hidden = !note;
+  $("fresh").textContent = note;
+  $("vdot").classList.toggle("stale", !!note);
+}
+
+/* The activity line: what an agent is doing right now, from the live stream. */
+let actTimer = 0;
+function showActivity(a) {
+  const name = byId().get(a.state)?.name ?? a.state ?? "a screen";
+  const el = $("act");
+  clearTimeout(actTimer);
+  el.innerHTML = a.phase === "start" ? `<i></i>Capturing ${esc(name)}` : a.phase === "done" ? `Captured ${esc(name)}` : `Capture of ${esc(name)} failed`;
+  el.hidden = false;
+  if (a.phase !== "start") actTimer = setTimeout(() => { el.hidden = true; }, 4000);
+}
+
+/* Connect: one row for each coding agent, with the action that adds Atlas to it, or its status once it has connected. */
+const ASK = "Set up Atlas for this app.";
+/** The client an MCP client name belongs to, such as "claude-code" to "claude". */
+const clientOf = (name) => (/claude/i.test(name) ? "claude" : /codex|openai/i.test(name) ? "codex" : /cursor/i.test(name) ? "cursor" : "other");
+function ago(iso) {
+  const s = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
+  return s < 60 ? "just now" : s < 3600 ? `${Math.floor(s / 60)} min ago` : `${Math.floor(s / 3600)} h ago`;
+}
+function fillConnect() {
+  const c = data.connect, panel = $("connect");
+  const latest = (id) => (data.agents ?? []).filter((a) => clientOf(a.name) === id).sort((a, b) => b.connectedAt.localeCompare(a.connectedAt))[0];
+  const rows = [
+    ...c.clients.map((x) => ({ id: x.client, name: x.name, action: x.client === "cursor"
+      ? `<a class="rowbtn" href="${esc(x.command)}">Add to Cursor</a>`
+      : `<button class="rowbtn" type="button" data-copy="${esc(x.command)}" title="${esc(x.command)}" aria-label="Copy the ${esc(x.name)} command">Copy command</button>` })),
+    { id: "other", name: "Other MCP client", action: `<button class="rowbtn" type="button" data-copy="${esc(c.url)}" title="${esc(c.url)}" aria-label="Copy the MCP address">Copy address</button>` }
+  ];
+  const focused = panel.contains(document.activeElement) ? document.activeElement.getAttribute("aria-label") : null;
+  panel.innerHTML = `<h2 id="connectTitle">Connect an agent</h2>
+    <ul class="clients">${rows.map((r) => {
+      const agent = latest(r.id);
+      return `<li><span class="logo">${icon(`logo-${r.id}`)}</span><span class="nm">${esc(r.name)}</span>${agent ? `<span class="linked"><i></i>Connected ${ago(agent.connectedAt)}</span>` : r.action}</li>`;
+    }).join("")}</ul>${data.states.length ? "" : `
+    <div class="ask"><p>Then ask your agent</p>
+      <div class="say"><span>${ASK}</span><button class="copy" type="button" data-copy="${ASK}" aria-label="Copy the sentence">${icon("copy-linear")}</button></div></div>`}`;
+  if (focused) [...panel.querySelectorAll("[aria-label]")].find((el) => el.getAttribute("aria-label") === focused)?.focus();
+}
+function toggleConnect(open) {
+  const panel = $("connect"), btn = $("connectBtn");
+  panel.hidden = !open; btn.setAttribute("aria-expanded", String(open));
+  if (open) panel.querySelector("button, a")?.focus(); else btn.focus();
+}
+$("connectBtn").addEventListener("click", () => toggleConnect($("connect").hidden));
+$("emptyConnect").addEventListener("click", () => toggleConnect(true));
+$("connect").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-copy]"); if (!b) return;
+  const label = b.getAttribute("aria-label");
+  try {
+    await navigator.clipboard.writeText(b.dataset.copy);
+    const svg = b.querySelector("svg"), text = b.textContent;
+    if (svg) svg.outerHTML = icon("check-linear"); else b.textContent = "Copied";
+    b.setAttribute("aria-label", "Copied");
+    setTimeout(() => { if (svg) b.querySelector("svg").outerHTML = icon("copy-linear"); else b.textContent = text; b.setAttribute("aria-label", label); }, 1500);
+  } catch {
+    // Without clipboard access, show the text so the person can copy it by hand.
+    window.prompt("Copy this:", b.dataset.copy);
+  }
+});
+document.addEventListener("pointerdown", (e) => { if (!$("connect").hidden && !$("connect").contains(e.target) && e.target !== $("connectBtn")) toggleConnect(false); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { if (!$("connect").hidden) { toggleConnect(false); return; } if (selected) { deselect(); return; } }
+  if (e.target.matches("input, textarea, select, [role=listbox]")) return;
+  if (e.key === "0") fitAll();
+  else if (e.key === "+" || e.key === "=") zoomAt(1.25, innerWidth / 2, innerHeight / 2, true);
+  else if (e.key === "-") zoomAt(0.8, innerWidth / 2, innerHeight / 2, true);
+});
+window.addEventListener("resize", () => apply());
+
+/* ---------- Data ---------- */
+async function load(keepView) {
+  const res = await fetch("/api/atlas");
+  const next = await res.json();
+  if (!res.ok) throw new Error(next.error ?? `Atlas answered ${res.status}`);
+  const first = !data;
+  data = next;
+  if (first && !flows().length) setMode("pages");
+  fillWidths(); fillMenus(); fillFreshness(); fillConnect();
+  render(keepView && !first);
+}
+async function start() {
+  ICONS = await (await fetch("/icons.json")).json();
+  $("connectBtn").insertAdjacentHTML("afterbegin", icon("plug-circle-linear"));
+  menu($("pickSel")); menu($("areaSel"));
+  await load(false);
+  const events = new EventSource("/api/events");
+  events.addEventListener("update", () => { load(true).catch(showError); });
+  events.addEventListener("activity", (e) => showActivity(JSON.parse(e.data)));
+}
+function showError(error) {
+  $("empty").hidden = false;
+  $("emptyTitle").textContent = "Atlas could not load";
+  $("emptyText").textContent = `${error.message}. Check that "atlas serve" is still running.`;
+  $("emptyConnect").hidden = true;
+}
+start().catch(showError);
+</script>
+</body>
+</html>

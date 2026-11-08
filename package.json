@@ -14,7 +14,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "pnpm build && vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "icons": "node scripts/icons.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
@@ -22,6 +23,8 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@iconify-json/simple-icons": "^1.2.101",
+    "@iconify-json/solar": "^1.2.14",
     "@types/node": "^26.6.6",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"

@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { capture } from "./capture.js";
 import { CLIENTS, connectInfo, writeClient, type Client } from "./connect.js";
@@ -13,6 +16,7 @@ const HELP = `atlas ${VERSION}
 See every screen of your web app as the code renders it.
 
 Usage:
+  atlas                         Start Atlas in this project: set it up if needed, serve it and open the viewer
   atlas init                    Set up .atlas/ in this project
   atlas serve [--port <n>]      Start Atlas on this computer, with the MCP endpoint at /mcp
   atlas connect [--write <app>] Show how to connect a coding agent, or add Atlas to one: ${CLIENTS.join(", ")}
@@ -24,9 +28,16 @@ Usage:
 Options:
   --root <folder>               The project's root folder (default: the nearest folder with .atlas/config.json)
   --port <n>                    The port for atlas serve and atlas connect (default: ${DEFAULT_PORT})
+  --no-open                     Start without opening the viewer in a browser
   -h, --help                    Show this help
   -v, --version                 Show the version
 `;
+
+/** Opens the viewer in the person's default browser. A failure only means they open the address themselves. */
+function openInBrowser(url: string): void {
+  const [command, args] = process.platform === "darwin" ? ["open", [url]] : process.platform === "win32" ? ["cmd", ["/c", "start", "", url]] : ["xdg-open", [url]];
+  execFile(command, args as string[], () => undefined);
+}
 
 const out = (text: string) => process.stdout.write(text.endsWith("\n") ? text : text + "\n");
 
@@ -49,15 +60,34 @@ async function main(argv: string[]): Promise<number> {
       cookie: { type: "string", multiple: true },
       width: { type: "string", multiple: true },
       json: { type: "boolean", default: false },
+      "no-open": { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
       version: { type: "boolean", short: "v", default: false }
     }
   });
   const [command] = positionals;
   if (values.version) return out(VERSION), 0;
-  if (values.help || !command || command === "help") return out(HELP), 0;
+  if (values.help || command === "help") return out(HELP), 0;
   const here = values.root ?? process.cwd();
-  switch (command) {
+  switch (command ?? "start") {
+    case "start": {
+      let root: string;
+      try {
+        root = findRoot(here);
+      } catch {
+        if (!existsSync(join(here, ".git"))) throw new AtlasError(`${here} is not the root of a git project. Run atlas in your project's root folder.`);
+        root = init(here).root;
+        out(`Set up Atlas in ${root}.`);
+      }
+      const running = await serve(root, portOf(values.port));
+      out(`Atlas for ${readConfig(root).name} is running at ${running.viewer}`);
+      out(`Connect your coding agent with one command:`);
+      for (const c of connectInfo(running.url).clients.filter((x) => x.client !== "cursor")) out(`  ${c.name}: ${c.command}`);
+      out(`  Cursor: atlas connect --write cursor`);
+      out(`Then ask your agent to set up Atlas for this app. Press Ctrl+C to stop.`);
+      if (!values["no-open"]) openInBrowser(running.viewer);
+      return 0;
+    }
     case "init": {
       const result = init(here);
       out(`Set up Atlas for ${result.config.name} in ${result.root}`);
@@ -70,6 +100,7 @@ async function main(argv: string[]): Promise<number> {
       const root = findRoot(here);
       const running = await serve(root, portOf(values.port));
       out(`Atlas for ${readConfig(root).name} is running.`);
+      out(`Viewer: ${running.viewer}`);
       out(`MCP endpoint: ${running.url}`);
       out(`Run "atlas connect" to connect a coding agent. Press Ctrl+C to stop.`);
       return 0;

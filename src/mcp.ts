@@ -9,8 +9,15 @@ import { VERSION } from "./version.js";
 
 const text = (body: string) => ({ content: [{ type: "text" as const, text: body }] });
 
-/** The Atlas MCP server for one project. The stdio and HTTP transports both use it. */
-export function createServer(root: string): McpServer {
+/** What an agent is doing, for the viewer's activity line. */
+export interface Activity {
+  tool: string;
+  state?: string;
+  phase: "start" | "done" | "failed";
+}
+
+/** The Atlas MCP server for one project. The stdio and HTTP transports both use it; `onActivity` reports tool calls to the viewer. */
+export function createServer(root: string, onActivity: (activity: Activity) => void = () => {}): McpServer {
   const server = new McpServer({ name: "atlas", version: VERSION }, { instructions: INSTRUCTIONS });
   server.registerTool(
     "atlas_guide",
@@ -56,8 +63,10 @@ export function createServer(root: string): McpServer {
       }
     },
     async (input) => {
+      onActivity({ tool: "atlas_capture", state: input.state, phase: "start" });
       try {
         const result = await capture(root, input);
+        onActivity({ tool: "atlas_capture", state: input.state, phase: "done" });
         const summary = {
           state: result.state,
           commit: result.commit,
@@ -72,6 +81,7 @@ export function createServer(root: string): McpServer {
           ]
         };
       } catch (error) {
+        onActivity({ tool: "atlas_capture", state: input.state, phase: "failed" });
         if (error instanceof AtlasError) return { isError: true, ...text(error.message) };
         throw error;
       }

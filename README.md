@@ -4,7 +4,7 @@ See every screen of your web app as the code renders it, compare it with live, a
 
 Atlas is for people who build by prompting coding agents. Agents build many screens and flows quickly, and clicking through all of them to check the result is slow. Atlas puts every screen in one place, shows what differs from live, and turns your marks into tasks that agents pick up.
 
-> **Status:** early. Atlas can set up a project, serve its MCP tools on your computer, connect your coding agent in one step, teach the agent how to write state recipes, and capture each state as a picture and an HTML snapshot. The viewer, compare and tasks come next. The [build plan](#build-plan) lists the steps.
+> **Status:** early. Atlas can set up a project, serve its MCP tools on your computer, connect your coding agent in one step, teach the agent how to write state recipes, and capture each state as a picture and an HTML snapshot. The viewer shows every captured screen and updates while your agent works. Compare and tasks come next. The [build plan](#build-plan) lists the steps.
 
 ## How it works
 
@@ -27,25 +27,19 @@ pnpm build
 In your project's root folder:
 
 ```sh
-node /path/to/atlas/dist/cli.js init
+node /path/to/atlas/dist/cli.js
 ```
 
-This writes:
+The first time, this sets up Atlas in the project. Then it starts Atlas and opens the viewer in your browser. Set-up writes:
 
 - `.atlas/config.json`: the project name, the live ref (from your remote's default branch) and the screen widths;
 - `.atlas/states/`: one recipe for each state;
 - `.atlas/tasks/`: one file for each task;
 - a `.gitignore` line for `.atlas/store/`, where captures are kept.
 
-### Start Atlas and connect your coding agent
+### Connect your coding agent
 
-In your project's root folder:
-
-```sh
-node /path/to/atlas/dist/cli.js serve
-```
-
-Atlas runs on your computer only, with its MCP endpoint at `http://localhost:4317/mcp`. Then connect your agent with one command:
+Atlas runs on your computer only. The viewer is at `http://localhost:4317/` and the MCP endpoint at `http://localhost:4317/mcp`. Click **Connect** in the viewer, or connect your agent with one command:
 
 | Agent | Command |
 | --- | --- |
@@ -55,7 +49,7 @@ Atlas runs on your computer only, with its MCP endpoint at `http://localhost:431
 
 `atlas connect` prints these for your setup, and `atlas connect --write <claude|codex|cursor>` adds Atlas to that agent for you. Any other MCP client takes the endpoint as a streamable HTTP server.
 
-You don't need to add anything to `AGENTS.md` or similar files. The server tells your agent how to use Atlas.
+Then ask your agent: "Set up Atlas for this app." You don't need to add anything to `AGENTS.md` or similar files. The server tells your agent how to use Atlas. The Connect panel lists each agent that has connected since Atlas started.
 
 For clients that start MCP servers themselves, `atlas mcp` serves the same tools over stdio.
 
@@ -63,8 +57,9 @@ For clients that start MCP servers themselves, `atlas mcp` serves the same tools
 
 | Command | What it does |
 | --- | --- |
+| `atlas` | Sets up the project if it is new, starts Atlas and opens the viewer. `--no-open` keeps the browser closed |
 | `atlas init` | Sets up `.atlas/` in the project |
-| `atlas serve` | Starts Atlas on your computer, with the MCP endpoint at `/mcp`. `--port` changes the port from 4317 |
+| `atlas serve` | Starts Atlas on your computer: the viewer at `/` and the MCP endpoint at `/mcp`. `--port` changes the port from 4317 |
 | `atlas connect` | Shows how to connect each coding agent. `--write <claude\|codex\|cursor>` adds Atlas to that agent |
 | `atlas states` | Lists state recipes, recipes that need repair, and the live and branch commits. Add `--json` for structured output |
 | `atlas capture <state> --base-url <url>` | Captures one state at the current commit. `--cookie name=value` passes a test session; `--width` overrides the widths |
@@ -127,4 +122,4 @@ Atlas captures with Playwright's browser. When that browser is not installed, At
 
 ## Licence
 
-MIT
+MIT. The viewer's icons are [Solar](https://www.figma.com/community/file/1166831539721848736) by 480 Design, licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The agent logos are from [Simple Icons](https://simpleicons.org) (CC0). Each logo is a trademark of its owner.

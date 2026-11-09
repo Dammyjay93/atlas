@@ -2,6 +2,12 @@
 
 Each release of the npm package `useflowmap`. Versions follow [semantic versioning](https://semver.org).
 
+## 0.1.3 (not released)
+
+- `Math.random` gives the same numbers on every capture, from a fixed seed, so a chart drawn from random numbers no longer shows as changed.
+- `hide` also applies on each page that a step opens, not only on the first page.
+- The setup text says how to connect an agent when you have two projects, and that a chart drawn from random numbers needs no change.
+
 ## 0.1.2 (9 November 2026)
 
 Fixes for the roadblocks found when a coding agent set up Flowmap on shadcn-admin with no help.
@@ -10,9 +16,7 @@ Fixes for the roadblocks found when a coding agent set up Flowmap on shadcn-admi
 - `hide` applies before a recipe's steps run, so a development overlay never covers a control that a step clicks.
 - `landedOn` checks only where the app sent the browser when the page opened. A step that writes a query, such as a filter, no longer counts.
 - Each project gets its own port from 4317 to 4416, worked out from its folder, so a connected agent keeps reaching the same project.
-- `hide` also applies on each page that a step opens, not only on the first page.
-- `Math.random` gives the same numbers on every capture, so a chart drawn from random numbers no longer shows as changed.
-- The setup text explains step selectors, `--no-open`, apps with no sign-in, states that exist at one width, screens that show today's date, and how to connect an agent when you have two projects.
+- The setup text explains step selectors, `--no-open`, apps with no sign-in, states that exist at one width, and screens that show today's date.
 
 ## 0.1.1 (9 November 2026)
 

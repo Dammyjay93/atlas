@@ -2,6 +2,17 @@
   "name": "useflowmap",
   "version": "0.1.2",
   "description": "See every screen of your web app as the code renders it, compare it with live, and send changes back to your coding agents.",
+  "keywords": [
+    "mcp",
+    "coding-agents",
+    "screenshots",
+    "visual-regression",
+    "ui-review",
+    "playwright",
+    "claude-code",
+    "codex",
+    "cursor"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",

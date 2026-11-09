@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { existsSync, readFileSync, statSync, watch } from "node:fs";
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
@@ -12,6 +13,16 @@ import { chooseVariant, createTask, CreateSchema, updateTask } from "./tasks.js"
 import { viewerData } from "./viewer-data.js";
 
 export const DEFAULT_PORT = 4317;
+/** How many ports, from DEFAULT_PORT up, Flowmap uses for projects. */
+export const PORT_RANGE = 100;
+
+/**
+ * The port Flowmap first tries for a project. It is worked out from the project's folder, so it is the same after every
+ * restart, and an agent connected to it keeps reaching this project and not another one that started first.
+ */
+export function projectPort(root: string): number {
+  return DEFAULT_PORT + (createHash("sha256").update(resolve(root)).digest().readUInt32BE(0) % PORT_RANGE);
+}
 const VIEWER = fileURLToPath(new URL("../viewer/index.html", import.meta.url));
 const ICONS = fileURLToPath(new URL("../viewer/icons.json", import.meta.url));
 const TYPES: Record<string, string> = { ".png": "image/png", ".html": "text/html; charset=utf-8", ".json": "application/json" };

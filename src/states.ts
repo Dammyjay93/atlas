@@ -9,6 +9,7 @@ const StepSchema = z.union([
   z.strictObject({ press: z.string().min(1) }),
   z.strictObject({ waitFor: z.string().min(1) })
 ]);
+export type Step = z.infer<typeof StepSchema>;
 
 /**
  * How to reach one state of the product. Agents write a recipe when they build a screen and repair it when it stops working.

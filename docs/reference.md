@@ -28,12 +28,12 @@ To start Flowmap yourself instead, run `npx useflowmap` in your project's root f
 
 ## Connect your coding agent
 
-Flowmap runs on your computer only. The viewer is at `http://localhost:4317/` and the MCP endpoint at `http://localhost:4317/mcp`. Click **Connect** in the viewer, or connect your agent with one command:
+Flowmap runs on your computer only. Each project gets its own port from 4317 to 4416, worked out from the project's folder, so the address stays the same after a restart and an agent connected to it keeps reaching the same project. If that port is taken, Flowmap uses the next free one. `flowmap setup` and `flowmap connect` print the project's address. Click **Connect** in the viewer, or connect your agent with one command, with your project's port in place of `<port>`:
 
 | Agent | Command |
 | --- | --- |
-| Claude Code | `claude mcp add --transport http flowmap http://localhost:4317/mcp` |
-| Codex | `codex mcp add flowmap --url http://localhost:4317/mcp` |
+| Claude Code | `claude mcp add --transport http flowmap http://localhost:<port>/mcp` |
+| Codex | `codex mcp add flowmap --url http://localhost:<port>/mcp` |
 | Cursor | Open the link that `flowmap connect` prints, or run `flowmap connect --write cursor` |
 
 `flowmap connect` prints these for your setup, and `flowmap connect --write <claude|codex|cursor>` adds Flowmap to that agent for you. Any other MCP client takes the endpoint as a streamable HTTP server.
@@ -42,6 +42,8 @@ Then ask your agent: "Set up Flowmap for this app." You don't need to add anythi
 
 For clients that start MCP servers themselves, `flowmap mcp` serves the same tools over stdio.
 
+The server's instructions name its project and folder, so an agent connected to another project's Flowmap can tell.
+
 ## Commands
 
 The npm package is `useflowmap`. Run a command with `npx useflowmap <command>`, or install the package and run `flowmap <command>`.
@@ -49,9 +51,9 @@ The npm package is `useflowmap`. Run a command with `npx useflowmap <command>`, 
 | Command | What it does |
 | --- | --- |
 | `flowmap` | In a terminal: sets up the project if it is new, starts Flowmap and opens the viewer, and runs until you press Ctrl+C. If Flowmap already runs for the project, it opens the viewer. Started by a program, such as a coding agent, it prints the usage instead; `flowmap start` starts Flowmap anyway. `--no-open` keeps the browser closed |
-| `flowmap setup` | For your coding agent: sets Flowmap up, starts it in the background on a free port, opens the viewer and prints what the agent does next |
+| `flowmap setup` | For your coding agent: sets Flowmap up, starts it in the background on the project's own port, opens the viewer and prints what the agent does next. With `--no-open`, the text tells the agent to give you the address |
 | `flowmap init` | Sets up `.flowmap/` in the project |
-| `flowmap serve` | Starts Flowmap on your computer: the viewer at `/` and the MCP endpoint at `/mcp`. `--port` changes the port from 4317 |
+| `flowmap serve` | Starts Flowmap on your computer: the viewer at `/` and the MCP endpoint at `/mcp`. `--port` sets the port; without it, Flowmap uses the project's own port |
 | `flowmap connect` | Shows how to connect each coding agent. `--write <claude\|codex\|cursor>` adds Flowmap to that agent |
 | `flowmap states` | Lists state recipes, recipes that need repair, and the live and branch commits. Add `--json` for structured output |
 | `flowmap capture [<state>...] --base-url <url>` | Captures every state, or the ones named, at the current commit, in one browser. It runs each recipe's `setup` and `session` first, one setup at a time, and captures the states of each setup several at a time. `--cookie name=value` adds a cookie to every state; `--width` overrides the widths; `--live`, for one state, files the capture under live's commit, for an app started from a copy of the project at live |
@@ -94,11 +96,13 @@ A recipe tells Flowmap how to reach one state. Agents write a recipe when they b
 }
 ```
 
-Before it captures a state, Flowmap runs the recipe's `setup`, then its `session`, as shell commands in the project's folder, with `FLOWMAP_BASE_URL` set to the app's address. Then it opens `route` with the session's cookies and runs `steps`. `fullPage` captures a long page in full. `leadsTo` draws the flow connectors between screens.
+Before it captures a state, Flowmap runs the recipe's `setup`, then its `session`, as shell commands in the project's folder, with `FLOWMAP_BASE_URL` set to the app's address. Then it opens `route` with the session's cookies and runs `steps`. A route can carry a query, such as `/tasks?filter=done`. `fullPage` captures a long page in full. `leadsTo` draws the flow connectors between screens.
 
 - `setup` puts the app's data in the state the screen needs. It must reset everything the screen depends on, because opening a page can change data, and running it twice must give the same state.
 - `session` signs in a test account and prints its cookies, one `name=value` on each line, such as `sid=abc123`. Text after a `;` on a line, such as Set-Cookie attributes, is ignored. An app that keeps its sign-in in the browser's localStorage prints `localStorage:name=value` lines instead, with the value on one line; Flowmap puts these items in localStorage for the app's address before the page opens. The usual session command is a small script that calls the app's own session code for a test account.
 - States with the same `setup` form a group. Flowmap runs the group's setup once, then each of its session commands once, then captures its states several at a time. It never runs two different setups at the same time, so states that need data in states that conflict get different setup commands and are captured one after the other.
+- Each step takes a Playwright selector: CSS, such as `button[aria-label='Close']`; CSS with visible text, such as `button:has-text('Add user')`; or a role and name, such as `role=tab[name='Analytics']`. Each step waits up to 30 seconds. When a step fails, Flowmap names the step, the widths it failed at, and why: no element matches, none is visible, or another element covers it, with that element.
+- `landedOn` reports where the app sent the browser when the page opened, such as a sign-in page, when the path differs from `route`. A step that changes the address on purpose, such as a filter that writes its query, does not count.
 - Each command may run for 5 minutes. If a group's setup or a session command fails, Flowmap reports those states as not captured, with the command and the end of its output, and still captures the other groups. A run with a state that was not captured exits with code 1.
 
 ## Compare with live
@@ -135,7 +139,7 @@ A task moves from `open` to `in-progress` to `ready-for-review`, which the agent
 | `liveRef` | The git ref the project deploys from, such as `origin/main`. Flowmap resolves it on every run |
 | `liveUrl` | The live site's address |
 | `widths` | Screen widths to capture, in CSS pixels. Default: 1440 and 390 |
-| `hide` | CSS selectors removed before each capture, such as a development overlay |
+| `hide` | CSS selectors for elements that are not part of the product, such as a development overlay. Flowmap hides them before a recipe's steps run, so they never cover a control a step clicks, and removes them from each capture |
 | `ignoreChanges` | Files a tool rewrites when the app starts, such as `AGENTS.md` under `next dev`. Their uncommitted changes do not mark captures as uncommitted. Every capture with uncommitted changes names the changed files |
 | `time` | A fixed time for the browser's clock during capture. It keeps dates the page works out itself the same between captures. Dates the server works out, such as "Posted 3 days ago", follow the server's clock: seed them relative to the current time in the recipe's `setup` |
 

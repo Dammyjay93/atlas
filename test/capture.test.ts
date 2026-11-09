@@ -29,6 +29,9 @@ beforeAll(async () => {
     if (url.pathname === "/sign-in") return html(page("<h1>Sign in</h1>"));
     if (url.pathname === "/token") return html(page(`<h1 id="t"></h1><script>document.getElementById("t").textContent = localStorage.getItem("auth") ?? "Signed out"</script>`));
     if (url.pathname === "/data") return html(page(`<h1>${readFileSync(join(project, "data.txt"), "utf8").trim()}</h1>`));
+    // A button under a fixed overlay, such as a development tool's badge, and a filter that writes its query to the address.
+    if (url.pathname === "/overlay") return html(page(`<button onclick="document.querySelector('p').textContent='Saved'">Save</button><p>Not saved</p><div class="devtools" style="position:fixed;inset:0;background:transparent"></div>`));
+    if (url.pathname === "/filter") return html(page(`<input oninput="history.replaceState(null, '', '/filter?q=' + this.value); document.querySelector('p').textContent = 'No results'"><p>All</p>`));
     if (url.pathname === "/time") return html(page(`<h1 id="t"></h1><script>document.getElementById("t").textContent = new Date().toISOString()</script>`));
     res.writeHead(404).end();
   });
@@ -165,6 +168,28 @@ describe("capture", () => {
     expect(results.map((r) => ("widths" in r ? /<h1>(\w+)<\/h1>/.exec(readFileSync(join(project, only(r).entry.html), "utf8"))?.[1] : r.problem))).toEqual(["a", "a", "b"]);
   });
 
+  it("says which step failed, at which width, and why", async () => {
+    writeFileSync(join(project, ".flowmap", "states", "cart-code.json"), JSON.stringify({ id: "cart-code", name: "Cart", route: "/cart", widths: [400, 1000], steps: [{ click: "button" }, { click: "button:has-text('Remove')" }] }));
+    await expect(capture(project, { state: "cart-code", baseUrl })).rejects.toThrow(`Capturing "cart-code" failed. At 400 and 1000 px, step 2 of 2, {"click":"button:has-text('Remove')"}, failed: no element matches "button:has-text('Remove')".`);
+  }, 90_000);
+
+  it("names the element that covers a control a step clicks, and hides the elements in hide before the steps run", async () => {
+    writeFileSync(join(project, ".flowmap", "states", "overlay.json"), JSON.stringify({ id: "overlay", name: "Saved", route: "/overlay", widths: [400], steps: [{ click: "button" }] }));
+    await expect(capture(project, { state: "overlay", baseUrl })).rejects.toThrow(/step 1 of 1, \{"click":"button"\}, failed: another element covers "button": <div class="devtools".*add a selector for it to "hide"/);
+    const file = join(project, ".flowmap", "config.json");
+    writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, "utf8")), hide: [".devtools"] }));
+    const html = snapshot(await capture(project, { state: "overlay", baseUrl }));
+    expect(html).toContain("Saved");
+    expect(html).not.toContain("devtools");
+  }, 90_000);
+
+  it("does not report a landing when a step changes the address on purpose", async () => {
+    writeFileSync(join(project, ".flowmap", "states", "filter.json"), JSON.stringify({ id: "filter", name: "No results", route: "/filter", widths: [400], steps: [{ fill: "input", value: "zz" }] }));
+    const result = await capture(project, { state: "filter", baseUrl });
+    expect(snapshot(result)).toContain("No results");
+    expect(only(result).entry.landedOn).toBeUndefined();
+  });
+
   it("names the recipes when the state does not exist", async () => {
     await expect(capture(project, { state: "basket", baseUrl })).rejects.toThrow(/No valid recipe with id "basket"\. Recipes: account, cart, cart-code, clock/);
   });
@@ -179,6 +204,8 @@ describe("flowmap_capture", () => {
       const content = result.content as { type: string; text?: string; mimeType?: string }[];
       expect(JSON.parse(content[0]?.text ?? "{}").widths[0].width).toBe(400);
       expect(content[1]).toMatchObject({ type: "image", mimeType: "image/jpeg" });
+      // The server names its project, so an agent connected to another project's Flowmap can tell.
+      expect(client.getInstructions()).toContain(`in ${execFileSync("realpath", [project], { encoding: "utf8" }).trim()}.`);
     } finally {
       await client.close();
     }

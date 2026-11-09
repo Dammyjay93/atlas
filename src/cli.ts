@@ -14,7 +14,7 @@ import { init } from "./init.js";
 import { serveStdio } from "./mcp.js";
 import { overview } from "./overview.js";
 import { FlowmapError, findRoot, readConfig } from "./project.js";
-import { DEFAULT_PORT, serve } from "./serve.js";
+import { DEFAULT_PORT, PORT_RANGE, projectPort, serve } from "./serve.js";
 import { TOPICS } from "./guide.js";
 import { PACKAGE, VERSION } from "./version.js";
 
@@ -42,7 +42,8 @@ Usage:
 
 Options:
   --root <folder>               The project's root folder (default: the nearest folder with .flowmap/config.json)
-  --port <n>                    The port for flowmap serve and flowmap connect (default: ${DEFAULT_PORT})
+  --port <n>                    The port for flowmap serve and flowmap connect (default: the project's own port from
+                                ${DEFAULT_PORT} to ${DEFAULT_PORT + PORT_RANGE - 1}, the same every time)
   --no-open                     Start without opening the viewer in a browser
   -h, --help                    Show this help
   -v, --version                 Show the version
@@ -72,9 +73,12 @@ function portOf(value: string | undefined): number {
   return port;
 }
 
-/** The port where Flowmap already serves this project, or null. Flowmap answers on the first free port from 4317 up. */
+/** The ports Flowmap tries for a project, in order: its own port first, then the next ones in the range, wrapping round. */
+const portsFor = (root: string) => Array.from({ length: PORT_RANGE }, (_, at) => DEFAULT_PORT + ((projectPort(root) - DEFAULT_PORT + at) % PORT_RANGE));
+
+/** The port where Flowmap already serves this project, or null. */
 async function servingAt(root: string): Promise<number | null> {
-  for (let port = DEFAULT_PORT; port < DEFAULT_PORT + 10; port++) {
+  for (const port of portsFor(root)) {
     try {
       const res = await fetch(`http://localhost:${port}/api/flowmap`, { signal: AbortSignal.timeout(1500) });
       const data = (await res.json()) as { project?: { root?: string } };
@@ -90,7 +94,7 @@ async function servingAt(root: string): Promise<number | null> {
 /** Starts "flowmap serve" for the project in the background, on the first port that takes it, and waits until it answers. */
 async function startInBackground(root: string): Promise<number> {
   const cli = fileURLToPath(import.meta.url);
-  for (let port = DEFAULT_PORT; port < DEFAULT_PORT + 10; port++) {
+  for (const port of portsFor(root)) {
     const child = spawn(process.execPath, [cli, "serve", "--root", root, "--port", String(port)], { detached: true, stdio: "ignore" });
     child.unref();
     for (let wait = 0; wait < 20; wait++) {
@@ -99,7 +103,31 @@ async function startInBackground(root: string): Promise<number> {
       if ((await servingAt(root)) === port) return port;
     }
   }
-  throw new FlowmapError(`Flowmap could not start on any port from ${DEFAULT_PORT} to ${DEFAULT_PORT + 9}. Stop a program that uses them, then run setup again.`);
+  throw new FlowmapError(`Flowmap could not start on any port from ${DEFAULT_PORT} to ${DEFAULT_PORT + PORT_RANGE - 1}. Stop a program that uses them, then run setup again.`);
+}
+
+/** Serves the project in this process on its own port, or the next free one in the range. */
+async function serveOnFree(root: string) {
+  for (const port of portsFor(root)) {
+    try {
+      return await serve(root, port);
+    } catch (error) {
+      if (error instanceof FlowmapError && /is in use/.test(error.message)) continue;
+      throw error;
+    }
+  }
+  throw new FlowmapError(`Flowmap could not start on any port from ${DEFAULT_PORT} to ${DEFAULT_PORT + PORT_RANGE - 1}. Stop a program that uses them, or start Flowmap with --port.`);
+}
+
+/** The port to connect an agent to: where Flowmap serves the project now, else the project's own port; outside a project, the default. */
+async function portOfProject(here: string): Promise<number> {
+  let root: string;
+  try {
+    root = resolve(findRoot(here));
+  } catch {
+    return DEFAULT_PORT;
+  }
+  return (await servingAt(root)) ?? projectPort(root);
 }
 
 /**
@@ -113,15 +141,15 @@ const self = () => {
 };
 
 /** What the agent does after setup, printed for the agent that ran it. */
-function nextForAgent(viewer: string, mcp: string, recipes: number): string {
-  return `Flowmap is running at ${viewer} and is open in the person's browser. Do the next steps now, without asking the person:
+function nextForAgent(viewer: string, mcp: string, recipes: number, opened: boolean): string {
+  return `Flowmap is running at ${viewer}${opened ? " and is open in the person's browser" : `. It is not open in a browser: give the person this address to open`}. Do the next steps now, without asking the person:
 
 1. ${recipes ? `The project has ${recipes} recipes in .flowmap/states/. Add a recipe for every state that has none.` : "Find the app's screens from its routes, and write a recipe in .flowmap/states/<id>.json for every state."} Every state means each route, and on each page each tab, menu, dialog, drawer, step of a flow, and each empty, error, plan or role state a person can reach. Do not leave out a screen because it needs sign-in or data: give it a setup command that puts the data in that state, and a session command that signs in a test account. The recipe guide below shows how.
 2. Start the app's development server if it is not running.
 3. Check the recipes with ${self()} states, and fix any it lists as invalid.
-4. Capture every screen with one command: ${self()} capture --base-url <the app's address>. Flowmap runs each recipe's setup and session itself. Each screen appears in the person's browser as it is captured. Fix any recipe whose capture failed or landed on the wrong page. If the pictures show development-only buttons or badges, such as a router or query devtools button, add their CSS selectors to "hide" in .flowmap/config.json. If the capture reports uncommitted changes only in files the development server rewrote as it started, add those files to "ignoreChanges" in .flowmap/config.json. Then capture again.
+4. Capture every screen with one command: ${self()} capture --base-url <the app's address>. Flowmap runs each recipe's setup and session itself. Each screen appears in the person's browser as it is captured. Fix any recipe whose capture failed or landed on the wrong page: a failed step says which step, at which width, and why. If the pictures show development-only buttons or badges, such as a router or query devtools button, add their CSS selectors to "hide" in .flowmap/config.json; Flowmap hides them before the steps run, so they never cover a control. If a picture shows today's date or the current time, set "time" in .flowmap/config.json to a fixed time, such as "2026-01-15T10:00:00Z", so the picture is the same on every run. If the capture reports uncommitted changes only in files the development server rewrote as it started, add those files to "ignoreChanges" in .flowmap/config.json. Then capture again.
 5. Connect yourself to Flowmap for later work. Its tools, such as flowmap_capture and flowmap_tasks, load in your next session; until then, use the commands above. ${connectInfo(mcp).clients.filter((c) => c.client !== "cursor").map((c) => `${c.name}: ${c.command}.`).join(" ")} Cursor: ${self()} connect --write cursor.
-6. Tell the person how many screens are in Flowmap, and that they can mark any of them for you to change.
+6. Tell the person how many screens are in Flowmap${opened ? "" : ` and the address to open, ${viewer}`}, and that they can mark any of them for you to change.
 
 ${TOPICS.recipes.replace("Call flowmap_states after you write or change recipes", `Run ${self()} states after you write or change recipes`)}`;
 }
@@ -173,7 +201,7 @@ async function main(argv: string[]): Promise<number> {
         if (!values["no-open"]) openInBrowser(`http://localhost:${already}/`);
         return 0;
       }
-      const running = await serve(root, portOf(values.port));
+      const running = values.port ? await serve(root, portOf(values.port)) : await serveOnFree(root);
       out(`Flowmap for ${readConfig(root).name} is running at ${running.viewer}`);
       out(`Connect your coding agent with one command:`);
       for (const c of connectInfo(running.url).clients.filter((x) => x.client !== "cursor")) out(`  ${c.name}: ${c.command}`);
@@ -196,7 +224,7 @@ async function main(argv: string[]): Promise<number> {
       const port = (await servingAt(root)) ?? (await startInBackground(root));
       const viewer = `http://localhost:${port}/`;
       if (!values["no-open"]) openInBrowser(viewer);
-      out(nextForAgent(viewer, `${viewer}mcp`, overview(root).states.length));
+      out(nextForAgent(viewer, `${viewer}mcp`, overview(root).states.length, !values["no-open"]));
       return 0;
     }
     case "init": {
@@ -209,7 +237,7 @@ async function main(argv: string[]): Promise<number> {
     }
     case "serve": {
       const root = findRoot(here);
-      const running = await serve(root, portOf(values.port));
+      const running = values.port ? await serve(root, portOf(values.port)) : await serveOnFree(root);
       out(`Flowmap for ${readConfig(root).name} is running.`);
       out(`Viewer: ${running.viewer}`);
       out(`MCP endpoint: ${running.url}`);
@@ -217,7 +245,7 @@ async function main(argv: string[]): Promise<number> {
       return 0;
     }
     case "connect": {
-      const info = connectInfo(`http://localhost:${portOf(values.port)}/mcp`);
+      const info = connectInfo(`http://localhost:${values.port ? portOf(values.port) : await portOfProject(here)}/mcp`);
       if (values.write) {
         if (!(CLIENTS as readonly string[]).includes(values.write)) throw new FlowmapError(`--write takes one of: ${CLIENTS.join(", ")}.`);
         return out(writeClient(values.write as Client, info.url, here)), 0;

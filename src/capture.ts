@@ -1,9 +1,9 @@
 import { exec, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chromium, type Browser } from "playwright";
+import { chromium, type Browser, type Page } from "playwright";
 import { currentBranch, readConfig, resolveRef, FlowmapError } from "./project.js";
 import { snapshotPage } from "./snapshot.js";
-import { readStates, type State } from "./states.js";
+import { readStates, type State, type Step } from "./states.js";
 import { saveCapture, type Entry } from "./store.js";
 import { layoutMap, type LayoutItem } from "./text-map.js";
 import { markBuilding, saveVariant, type Variant } from "./variants.js";
@@ -138,16 +138,34 @@ export async function shoot(browser: Browser, root: string, state: State, base: 
         const page = await context.newPage();
         if (config.time) await page.clock.setFixedTime(new Date(config.time));
         const target = new URL(state.route, base);
-        const response = await page.goto(target.href, { waitUntil: "networkidle", timeout: 60_000 });
+        let response;
+        try {
+          response = await page.goto(target.href, { waitUntil: "networkidle", timeout: 60_000 });
+        } catch (error) {
+          throw new FlowmapError(`opening ${target.href} failed: ${(error as Error).message.split("\n")[0]}`);
+        }
         await page.evaluate(() => document.fonts.ready.then(() => undefined));
-        for (const step of state.steps ?? []) {
-          if ("click" in step) await page.click(step.click);
-          else if ("fill" in step) await page.fill(step.fill, step.value);
-          else if ("press" in step) await page.keyboard.press(step.press);
-          else await page.waitForSelector(step.waitFor);
+        // Hidden before the steps run, including elements added later, so a development overlay never covers a control that a
+        // step clicks. One rule for each selector, so a selector the browser cannot read leaves out only its own rule.
+        const hiding = config.hide.length ? await page.addStyleTag({ content: config.hide.map((selector) => `${selector} { display: none !important; }`).join("\n") }) : null;
+        // Where the app sent the browser when the page opened, such as a sign-in page. A recipe's steps may change the address
+        // on purpose, such as a filter that writes its query, so only the path on opening counts.
+        const opened = new URL(page.url());
+        const steps = state.steps ?? [];
+        for (const [at, step] of steps.entries()) {
+          try {
+            if ("click" in step) await page.click(step.click);
+            else if ("fill" in step) await page.fill(step.fill, step.value);
+            else if ("press" in step) await page.keyboard.press(step.press);
+            else await page.waitForSelector(step.waitFor);
+          } catch (error) {
+            throw new FlowmapError(`step ${at + 1} of ${steps.length}, ${JSON.stringify(step)}, failed: ${await whyStepFailed(page, step, error as Error)}`);
+          }
         }
         if (state.steps?.length) await page.waitForLoadState("networkidle");
         for (const selector of config.hide) await page.locator(selector).evaluateAll((els) => els.forEach((el) => el.remove()));
+        // The elements are gone, so the stylesheet that hid them is not part of the page either.
+        await hiding?.evaluate((style) => (style as Element).remove());
         const opts = { fullPage: state.fullPage ?? false, animations: "disabled" as const, caret: "hide" as const };
         // Wait until the page stops changing: a loading bar or late content would otherwise show as a change that is not one.
         let last = await page.screenshot({ ...opts, type: "png", scale: "css" });
@@ -162,11 +180,10 @@ export async function shoot(browser: Browser, root: string, state: State, base: 
         // Before the snapshot, which rewrites the page's styles and so its layout.
         const layout = await page.evaluate(layoutMap, opts.fullPage);
         const html = await page.evaluate(snapshotPage);
-        const landed = new URL(page.url());
         return {
           width, png, preview, html, layout,
           route: state.route,
-          ...(landed.pathname + landed.search !== target.pathname + target.search ? { landedOn: landed.pathname + landed.search } : {}),
+          ...(opened.pathname !== target.pathname ? { landedOn: opened.pathname + opened.search } : {}),
           status: response?.status() ?? 0,
           capturedAt: new Date().toISOString()
         };
@@ -174,12 +191,39 @@ export async function shoot(browser: Browser, root: string, state: State, base: 
         await context.close();
       }
   };
+  // Every width runs to the end, so the problem names each width that failed, not only the first.
+  const settled = await Promise.allSettled(widths.map(one));
+  const problems = new Map<string, number[]>();
+  settled.forEach((result, at) => {
+    if (result.status === "fulfilled") return;
+    const error = result.reason as Error;
+    const problem = error instanceof FlowmapError ? error.message : error.message.split("\n")[0] ?? String(error);
+    problems.set(problem, [...(problems.get(problem) ?? []), widths[at] as number]);
+  });
+  if (!problems.size) return settled.map((result) => (result as PromiseFulfilledResult<Shot>).value);
+  const list = [...problems].map(([problem, at]) => `At ${at.join(" and ")} px, ${problem}`);
+  throw new FlowmapError(`Capturing "${state.id}" failed. ${list.join(" ")}`);
+}
+
+/** Why a step failed, in words an agent can act on: no element matches, none is visible, or another element covers it. */
+async function whyStepFailed(page: Page, step: Step, error: Error): Promise<string> {
+  const first = error.message.split("\n")[0] ?? "";
+  if ("press" in step) return first;
+  const selector = "click" in step ? step.click : "fill" in step ? step.fill : step.waitFor;
+  let found: { all: number; visible: number };
   try {
-    return await Promise.all(widths.map(one));
-  } catch (error) {
-    if (error instanceof FlowmapError) throw error;
-    throw new FlowmapError(`Capturing "${state.id}" failed: ${(error as Error).message.split("\n")[0]}`);
+    found = await page.locator(selector).evaluateAll((els) => ({
+      all: els.length,
+      visible: els.filter((el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden").length
+    }));
+  } catch (invalid) {
+    return `"${selector}" is not a selector Flowmap can read: ${(invalid as Error).message.split("\n")[0]}`;
   }
+  if (!found.all) return `no element matches "${selector}".`;
+  if (!found.visible) return `${found.all} ${found.all === 1 ? "element matches" : "elements match"} "${selector}", but none is visible.`;
+  const cover = /(<[^\n]*?>)[^\n]*intercepts pointer events/.exec(error.message)?.[1];
+  if (cover) return `another element covers "${selector}": ${cover.slice(0, 160)}. If that element is not part of the product, such as a development overlay, add a selector for it to "hide" in .flowmap/config.json.`;
+  return first;
 }
 
 /** Runs `run` on each item, at most `limit` at a time, and returns the results in the items' order. */

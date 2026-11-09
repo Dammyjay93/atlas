@@ -56,11 +56,11 @@ One file for each state: .flowmap/states/<id>.json. The id uses lowercase letter
 
 - name: what a person calls the state, in plain words.
 - area and page: where it sits in the product. Screens with the same page are grouped together.
-- route: the path to open, starting with /. For a page with an id in its path, such as /orders/[id], make setup create the record with a fixed id, or find one that always exists, and put that id in the route.
+- route: the path to open, starting with /. It can carry a query, such as /tasks?filter=done. For a page with an id in its path, such as /orders/[id], make setup create the record with a fixed id, or find one that always exists, and put that id in the route.
 - setup: a shell command that puts the app's data in the state the screen needs. Flowmap runs it in the project's folder just before it captures the state. Make it reset everything the screen depends on, not only add to it: opening a page can change data, such as a page that saves progress or a notice that is dismissed once seen, and the next capture must start from the same data. Running it twice gives the same state.
-- session: a shell command that signs in a test account and prints its session cookies, one name=value on each line, such as sid=abc123. If the app keeps its sign-in in the browser's localStorage instead, print each item as localStorage:name=value, with the value on one line, such as localStorage:auth-token={"access_token":"..."}. Flowmap runs it after setup and opens the page with those cookies and items. Leave it out for screens a signed-out person sees.
-- steps: browser actions after the page opens, in order. Each step is one of { "click": selector }, { "fill": selector, "value": text }, { "press": key } or { "waitFor": selector }. Use steps to open a tab, menu, dialog or drawer.
-- widths: screen widths in pixels, if they differ from the project's settings.
+- session: a shell command that signs in a test account and prints its session cookies, one name=value on each line, such as sid=abc123. If the app keeps its sign-in in the browser's localStorage instead, print each item as localStorage:name=value, with the value on one line, such as localStorage:auth-token={"access_token":"..."}. Flowmap runs it after setup and opens the page with those cookies and items. Leave it out for screens a signed-out person sees, and for every screen when the app has no sign-in.
+- steps: browser actions after the page opens, in order. Each step is one of { "click": selector }, { "fill": selector, "value": text }, { "press": key } or { "waitFor": selector }. Use steps to open a tab, menu, dialog or drawer. A selector is a Playwright selector: CSS, such as button[aria-label='Close']; CSS with visible text, such as button:has-text('Add user'); or a role and name, such as role=tab[name='Analytics']. A key is a Playwright key name, such as Enter or Escape. Each step waits up to 30 seconds for its element to be visible and free to click. A step may change the address, such as a filter that writes its query; only the address the page opens on is checked.
+- widths: screen widths in pixels, if they differ from the project's settings, such as [390] for a menu that shows only on a phone.
 - fullPage: true captures the whole length of a page that scrolls.
 - leadsTo: the states a person reaches from this one, and the action that takes them there. Flowmap draws these as the flow between screens.
 
@@ -101,7 +101,7 @@ For captures that stay the same between runs:
 - If the app shows relative dates, such as "3 days ago", make the recipe's setup seed those dates relative to the current time, so they read the same on every run. Setting "time" in .flowmap/config.json only freezes the browser's clock; dates the server works out still follow the server's clock.
 - Add selectors to "hide" in .flowmap/config.json for anything that is not part of the product, such as a development overlay.
 
-If the result says landedOn, the app sent the browser somewhere other than the recipe's route, for example to a sign-in page, or to a guided tour or an onboarding step that the account has not finished. Check the session and the setup. The app's own end-to-end tests often show how to put an account past such a step.
+If the result says landedOn, the app sent the browser to another path than the recipe's route when the page opened, for example to a sign-in page, or to a guided tour or an onboarding step that the account has not finished. Check the session and the setup. The app's own end-to-end tests often show how to put an account past such a step.
 If the result's status is not 200, the page answered with an error, for example 401 when the session cookie is wrong.`,
 
   compare: `How to compare with live

@@ -9,8 +9,8 @@ import { markBuilding, VariantSchema } from "./variants.js";
 import { readStates } from "./states.js";
 import { INSTRUCTIONS, TOPICS, type Topic } from "./guide.js";
 import { overview } from "./overview.js";
-import { FlowmapError, resolveRef } from "./project.js";
-import { VERSION } from "./version.js";
+import { FlowmapError, readConfig, resolveRef } from "./project.js";
+import { PACKAGE, VERSION } from "./version.js";
 
 const text = (body: string) => ({ content: [{ type: "text" as const, text: body }] });
 
@@ -69,7 +69,9 @@ export interface Activity {
 
 /** The Flowmap MCP server for one project. The stdio and HTTP transports both use it; `onActivity` reports tool calls to the viewer. */
 export function createServer(root: string, onActivity: (activity: Activity) => void = () => {}): McpServer {
-  const server = new McpServer({ name: "flowmap", version: VERSION }, { instructions: INSTRUCTIONS });
+  // Names the project, so an agent connected to another project's Flowmap sees it before it captures anything.
+  const which = `This Flowmap serves the project ${readConfig(root).name} in ${root}. If you work in another folder, you are connected to another project's Flowmap: run "npx ${PACKAGE} setup" in your project and connect to the address it prints.`;
+  const server = new McpServer({ name: "flowmap", version: VERSION }, { instructions: `${which}\n\n${INSTRUCTIONS}` });
   server.registerTool(
     "flowmap_guide",
     {

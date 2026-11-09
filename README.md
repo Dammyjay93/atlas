@@ -6,7 +6,7 @@
 
 See every screen of your web app as the code renders it, compare it with live, and send changes back to your coding agents.
 
-![Every screen of an admin app on one canvas, grouped by area, with the flows between them.](docs/images/canvas.png)
+![Every screen of an admin app on one canvas, with the flows between them. The canvas zooms into the dashboard and pans along the flow.](docs/images/canvas.webp)
 
 ## Quick start
 
@@ -20,31 +20,31 @@ Your agent writes a recipe for each screen, starts your app and captures every s
 
 Each route, tab, dialog, empty state and step of a flow, signed in or not, captured from the code at a commit. Each page keeps its states in a menu, so a drawer, a dialog or a filter is one click away.
 
-![The tasks page in Flowmap, with its menu of states open: create drawer, delete dialog, row menu and more.](docs/images/states.png)
+![The tasks page in Flowmap. Its menu of states opens, and choosing Create task drawer shows that state.](docs/images/states.webp)
 
 ## Compare with live
 
 Flowmap outlines what changed on each screen and names each element that was added, removed, moved or looks different. Drag between live and your branch.
 
-![The dashboard compared with live: live on the left of the handle, the branch on the right, and the two new buttons outlined.](docs/images/compare.png)
+![The dashboard compared with live. The handle is dragged left and right, showing live on its left and the branch on its right, with the changed area outlined.](docs/images/compare.webp)
 
 ## Mark what should change
 
 Drag over a part of a screen and write what should change. Your agent gets it as a task, with the element under your mark.
 
-![A box drawn around two buttons on the users page, with the request typed beside it.](docs/images/ask.png)
+![Comment mode on the users page. A box is dragged around two buttons, the request is typed and sent to the agent, and a numbered pin appears.](docs/images/ask.webp)
 
 ## Review the agent's work
 
 When the agent is done, see before and after side by side. Approve it, or send it back with a note.
 
-![A task ready for review: the request, the agent's note, before and after pictures, and Approve and Send back.](docs/images/review.png)
+![A task ready for review opens from its pin: the request, the agent's note, before and after pictures. Approve is clicked.](docs/images/review.webp)
 
 ## Versions side by side
 
 Ask for several versions of a screen. They appear next to each other, and you choose one.
 
-![Three versions of the dashboard's stat cards side by side, each with a one-line note.](docs/images/versions.png)
+![Three versions of the dashboard's stat cards side by side. Version B is selected and chosen.](docs/images/versions.webp)
 
 ## A check before "done"
 

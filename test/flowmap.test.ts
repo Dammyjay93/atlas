@@ -7,6 +7,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { projectPort } from "../src/serve.js";
 
 const CLI = resolve("dist/cli.js");
 const git = (dir: string, ...args: string[]) => execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" }).trim();
@@ -53,6 +54,11 @@ describe("flowmap setup", () => {
       expect(said).toContain(`node ${CLI} capture --base-url`);
       expect(said).toContain(`Run node ${CLI} states after you write or change recipes`);
       expect(said).toMatch(/add their CSS selectors to "hide"/);
+      expect(said).toMatch(/is running at http:\/\/localhost:\d+\/\. It is not open in a browser/);
+      expect(said).toMatch(/A selector is a Playwright selector/);
+      // The project's own port, the same after every restart.
+      expect(port).toBe(projectPort(execFileSync("realpath", [project], { encoding: "utf8" }).trim()));
+      expect(flowmap(project, "connect")).toContain(`http://localhost:${port}/mcp`);
       expect(git(project, "status", "--porcelain")).toBe("?? .flowmap/");
       const data = (await (await fetch(`http://localhost:${port}/api/flowmap`)).json()) as { project: { root: string } };
       expect(data.project.root).toBe(execFileSync("realpath", [project], { encoding: "utf8" }).trim());

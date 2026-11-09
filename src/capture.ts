@@ -135,6 +135,32 @@ export async function shoot(browser: Browser, root: string, state: State, base: 
         if (cookies.length) {
           await context.addCookies(cookies.map((c) => ({ ...c, domain: base.hostname, path: c.path ?? "/", secure: c.secure ?? (base.protocol === "https:" || c.name.startsWith("__Host-") || c.name.startsWith("__Secure-")) })));
         }
+        // Math.random gives the same numbers on every capture, as "time" does for the clock, so a chart or a list drawn from
+        // random numbers looks the same each time. Each page that opens starts the same sequence again.
+        await context.addInitScript(() => {
+          let seed = 0x2f6b9a1d;
+          Math.random = () => {
+            seed = (seed + 0x6d2b79f5) | 0;
+            let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+          };
+        });
+        // Hidden before the steps run, on every page a step opens and for elements added later, so a development overlay
+        // never covers a control that a step clicks. One rule for each selector, so a selector the browser cannot read leaves
+        // out only its own rule.
+        if (config.hide.length) {
+          await context.addInitScript((css: string) => {
+            const add = () => {
+              const style = document.createElement("style");
+              style.setAttribute("data-flowmap-hide", "");
+              style.textContent = css;
+              document.head.append(style);
+            };
+            if (document.head) add();
+            else document.addEventListener("DOMContentLoaded", add, { once: true });
+          }, config.hide.map((selector) => `${selector} { display: none !important; }`).join("\n"));
+        }
         const page = await context.newPage();
         if (config.time) await page.clock.setFixedTime(new Date(config.time));
         const target = new URL(state.route, base);
@@ -145,9 +171,6 @@ export async function shoot(browser: Browser, root: string, state: State, base: 
           throw new FlowmapError(`opening ${target.href} failed: ${(error as Error).message.split("\n")[0]}`);
         }
         await page.evaluate(() => document.fonts.ready.then(() => undefined));
-        // Hidden before the steps run, including elements added later, so a development overlay never covers a control that a
-        // step clicks. One rule for each selector, so a selector the browser cannot read leaves out only its own rule.
-        const hiding = config.hide.length ? await page.addStyleTag({ content: config.hide.map((selector) => `${selector} { display: none !important; }`).join("\n") }) : null;
         // Where the app sent the browser when the page opened, such as a sign-in page. A recipe's steps may change the address
         // on purpose, such as a filter that writes its query, so only the path on opening counts.
         const opened = new URL(page.url());
@@ -165,7 +188,7 @@ export async function shoot(browser: Browser, root: string, state: State, base: 
         if (state.steps?.length) await page.waitForLoadState("networkidle");
         for (const selector of config.hide) await page.locator(selector).evaluateAll((els) => els.forEach((el) => el.remove()));
         // The elements are gone, so the stylesheet that hid them is not part of the page either.
-        await hiding?.evaluate((style) => (style as Element).remove());
+        await page.evaluate(() => document.querySelectorAll("style[data-flowmap-hide]").forEach((style) => style.remove()));
         const opts = { fullPage: state.fullPage ?? false, animations: "disabled" as const, caret: "hide" as const };
         // Wait until the page stops changing: a loading bar or late content would otherwise show as a change that is not one.
         let last = await page.screenshot({ ...opts, type: "png", scale: "css" });

@@ -100,6 +100,7 @@ For captures that stay the same between runs:
 - Seed the same data every time.
 - If the app shows relative dates, such as "3 days ago", make the recipe's setup seed those dates relative to the current time, so they read the same on every run. Setting "time" in .flowmap/config.json only freezes the browser's clock; dates the server works out still follow the server's clock.
 - Add selectors to "hide" in .flowmap/config.json for anything that is not part of the product, such as a development overlay.
+- Math.random gives the same numbers on every capture, so a chart or list drawn from random numbers looks the same each time. Values from crypto.randomUUID or crypto.getRandomValues still change. So does data the server makes at random: seed it in the recipe's setup.
 
 If the result says landedOn, the app sent the browser to another path than the recipe's route when the page opened, for example to a sign-in page, or to a guided tour or an onboarding step that the account has not finished. Check the session and the setup. The app's own end-to-end tests often show how to put an account past such a step.
 If the result's status is not 200, the page answered with an error, for example 401 when the session cookie is wrong.`,

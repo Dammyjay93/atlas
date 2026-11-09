@@ -38,6 +38,8 @@ Flowmap runs on your computer only. Each project gets its own port from 4317 to 
 
 `flowmap connect` prints these for your setup, and `flowmap connect --write <claude|codex|cursor>` adds Flowmap to that agent for you. Any other MCP client takes the endpoint as a streamable HTTP server.
 
+With two projects, each project's Flowmap has its own address. Claude Code keeps a connection for the folder where you added it, so connect once in each project. Codex and Cursor keep one `flowmap` connection for every folder: run `flowmap connect` in the project you work on and connect again.
+
 Then ask your agent: "Set up Flowmap for this app." You don't need to add anything to `AGENTS.md` or similar files. The server tells your agent how to use Flowmap. The Connect panel lists each agent that has connected since Flowmap started.
 
 For clients that start MCP servers themselves, `flowmap mcp` serves the same tools over stdio.
@@ -139,8 +141,10 @@ A task moves from `open` to `in-progress` to `ready-for-review`, which the agent
 | `liveRef` | The git ref the project deploys from, such as `origin/main`. Flowmap resolves it on every run |
 | `liveUrl` | The live site's address |
 | `widths` | Screen widths to capture, in CSS pixels. Default: 1440 and 390 |
-| `hide` | CSS selectors for elements that are not part of the product, such as a development overlay. Flowmap hides them before a recipe's steps run, so they never cover a control a step clicks, and removes them from each capture |
+| `hide` | CSS selectors for elements that are not part of the product, such as a development overlay. Flowmap hides them before a recipe's steps run, and on each page a step opens, so they never cover a control a step clicks. It removes them from each capture |
 | `ignoreChanges` | Files a tool rewrites when the app starts, such as `AGENTS.md` under `next dev`. Their uncommitted changes do not mark captures as uncommitted. Every capture with uncommitted changes names the changed files |
 | `time` | A fixed time for the browser's clock during capture. It keeps dates the page works out itself the same between captures. Dates the server works out, such as "Posted 3 days ago", follow the server's clock: seed them relative to the current time in the recipe's `setup` |
+
+During capture, `Math.random` gives the same numbers every time, as `time` does for the clock, so a chart or list drawn from random numbers looks the same on every capture. Values from `crypto.randomUUID` or `crypto.getRandomValues`, and random data from the server, still change.
 
 Flowmap captures with Playwright's browser. When that browser is not installed, Flowmap uses Google Chrome. If neither is available, run `npx playwright install chromium-headless-shell`.

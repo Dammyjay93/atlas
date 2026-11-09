@@ -57,7 +57,7 @@ Flowmap tells your coding agent to run that same file for the next steps, so the
 
 - **Flowmap works for any web app.** A fix must not depend on one framework, one sign-in system or one project's files.
 - **Every change comes with a test** that fails without it.
-- **Keep the agent's instructions true.** If a change alters a command, a tool or a file format, update `src/guide.ts`, the text in `src/cli.ts` and the README in the same pull request. Agents follow that text word for word.
+- **Keep the agent's instructions true.** If a change alters a command, a tool or a file format, update `src/guide.ts`, the text in `src/cli.ts` and `docs/reference.md` in the same pull request. Agents follow that text word for word.
 - **Write plain text.** Short sentences, one name for each thing, no jargon. This applies to messages Flowmap prints, the guide and the README.
 - **No `any`, no `console.log`, no empty `catch`.** TypeScript must pass with `pnpm typecheck`.
 

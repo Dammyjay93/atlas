@@ -31,6 +31,8 @@ beforeAll(async () => {
     if (url.pathname === "/data") return html(page(`<h1>${readFileSync(join(project, "data.txt"), "utf8").trim()}</h1>`));
     // A button under a fixed overlay, such as a development tool's badge, and a filter that writes its query to the address.
     if (url.pathname === "/overlay") return html(page(`<button onclick="document.querySelector('p').textContent='Saved'">Save</button><p>Not saved</p><div class="devtools" style="position:fixed;inset:0;background:transparent"></div>`));
+    if (url.pathname === "/overlay-start") return html(page(`<a href="/overlay">Next</a><div class="devtools" style="position:fixed;inset:0;background:transparent"></div>`));
+    if (url.pathname === "/random") return html(page(`<h1 id="r"></h1><script>document.getElementById("r").textContent = Math.random()</script>`));
     if (url.pathname === "/filter") return html(page(`<input oninput="history.replaceState(null, '', '/filter?q=' + this.value); document.querySelector('p').textContent = 'No results'"><p>All</p>`));
     if (url.pathname === "/time") return html(page(`<h1 id="t"></h1><script>document.getElementById("t").textContent = new Date().toISOString()</script>`));
     res.writeHead(404).end();
@@ -182,6 +184,23 @@ describe("capture", () => {
     expect(html).toContain("Saved");
     expect(html).not.toContain("devtools");
   }, 90_000);
+
+  it("keeps the elements in hide hidden on a page that a step opens", async () => {
+    const file = join(project, ".flowmap", "config.json");
+    writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, "utf8")), hide: [".devtools"] }));
+    writeFileSync(join(project, ".flowmap", "states", "next.json"), JSON.stringify({ id: "next", name: "Saved", route: "/overlay-start", widths: [400], steps: [{ click: "a" }, { click: "button" }] }));
+    const html = snapshot(await capture(project, { state: "next", baseUrl }));
+    expect(html).toContain("Saved");
+    expect(html).not.toContain("devtools");
+  }, 90_000);
+
+  it("gives Math.random the same numbers on every capture", async () => {
+    writeFileSync(join(project, ".flowmap", "states", "random.json"), JSON.stringify({ id: "random", name: "Random", route: "/random", widths: [400] }));
+    const number = async () => /<h1 id="r">([\d.]+)<\/h1>/.exec(snapshot(await capture(project, { state: "random", baseUrl })))?.[1];
+    const first = await number();
+    expect(first).toMatch(/^0\.\d+$/);
+    expect(await number()).toBe(first);
+  });
 
   it("does not report a landing when a step changes the address on purpose", async () => {
     writeFileSync(join(project, ".flowmap", "states", "filter.json"), JSON.stringify({ id: "filter", name: "No results", route: "/filter", widths: [400], steps: [{ fill: "input", value: "zz" }] }));

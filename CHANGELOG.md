@@ -10,7 +10,9 @@ Fixes for the roadblocks found when a coding agent set up Flowmap on shadcn-admi
 - `hide` applies before a recipe's steps run, so a development overlay never covers a control that a step clicks.
 - `landedOn` checks only where the app sent the browser when the page opened. A step that writes a query, such as a filter, no longer counts.
 - Each project gets its own port from 4317 to 4416, worked out from its folder, so a connected agent keeps reaching the same project.
-- The setup text explains step selectors, `--no-open`, apps with no sign-in, states that exist at one width, and screens that show today's date.
+- `hide` also applies on each page that a step opens, not only on the first page.
+- `Math.random` gives the same numbers on every capture, so a chart drawn from random numbers no longer shows as changed.
+- The setup text explains step selectors, `--no-open`, apps with no sign-in, states that exist at one width, screens that show today's date, and how to connect an agent when you have two projects.
 
 ## 0.1.1 (9 November 2026)
 

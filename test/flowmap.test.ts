@@ -55,7 +55,13 @@ describe("flowmap setup", () => {
       expect(said).toContain(`Run node ${CLI} states after you write or change recipes`);
       expect(said).toMatch(/add their CSS selectors to "hide"/);
       expect(said).toMatch(/is running at http:\/\/localhost:\d+\/\. It is not open in a browser/);
-      expect(said).toMatch(/A selector is a Playwright selector/);
+      expect(said).toMatch(/A selector is a Playwright selector: .*button:has-text\('Add user'\).*role=tab\[name='Analytics'\]/);
+      expect(said).toMatch(/give the person this address to open/);
+      expect(said).toMatch(/Leave it out for screens a signed-out person sees, and for every screen when the app has no sign-in/);
+      expect(said).toMatch(/such as \[390\] for a menu that shows only on a phone/);
+      expect(said).toMatch(/If a picture shows today's date or the current time, set "time"/);
+      expect(said).toMatch(/Math\.random gives the same numbers on every capture/);
+      expect(said).toMatch(/Each project has its own Flowmap address.*Codex and Cursor keep one connection for every folder/);
       // The project's own port, the same after every restart.
       expect(port).toBe(projectPort(execFileSync("realpath", [project], { encoding: "utf8" }).trim()));
       expect(flowmap(project, "connect")).toContain(`http://localhost:${port}/mcp`);

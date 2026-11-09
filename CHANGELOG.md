@@ -2,7 +2,7 @@
 
 Each release of the npm package `useflowmap`. Versions follow [semantic versioning](https://semver.org).
 
-## 0.1.3 (not released)
+## 0.1.3 (9 November 2026)
 
 - `Math.random` gives the same numbers on every capture, from a fixed seed, so a chart drawn from random numbers no longer shows as changed.
 - `hide` also applies on each page that a step opens, not only on the first page.

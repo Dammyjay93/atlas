@@ -1,0 +1,16 @@
+name: Feature request
+description: Something Flowmap should do.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you tried to do, and what stopped you.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: What Flowmap could do about it.

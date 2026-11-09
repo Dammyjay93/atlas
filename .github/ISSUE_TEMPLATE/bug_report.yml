@@ -1,0 +1,38 @@
+name: Bug report
+description: Flowmap did something wrong or stopped a first run.
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Flowmap version
+      description: The output of `npx useflowmap --version`.
+    validations:
+      required: true
+  - type: input
+    id: setup
+    attributes:
+      label: Your setup
+      description: Operating system, Node version, coding agent, and the app's framework.
+      placeholder: macOS 26, Node 22.22, Claude Code, Next.js 16
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you or your agent ran, and what Flowmap printed. Paste the output as text.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: recipe
+    attributes:
+      label: Recipe
+      description: The recipe from `.flowmap/states/` that shows the problem, if there is one. Remove anything private.
+      render: json
